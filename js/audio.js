@@ -154,14 +154,14 @@ Z.audio = (function () {
   // 16-step patterns per section; two moods
   const PAT = {
     menu: {
-      tempo: 96,
+      tempo: 72,
       bass: ['A1', 0, 0, 0, 'A1', 0, 'G2', 0, 'F2', 0, 0, 0, 'E2', 0, 0, 0],
       arp: ['A3', 'C4', 'E4', 'C4', 'A3', 'C4', 'E4', 'G4', 'F3', 'A3', 'C4', 'A3', 'E3', 'G3', 'G3', 'E4'],
       pad: [['A2', 'C3', 'E3'], null, null, null, ['A2', 'C3', 'E3'], null, null, null, ['F2', 'A2', 'C3'], null, null, null, ['E2', 'G2', 'D3'], null, null, null],
       drums: 'k...h...ks..h...',
     },
     combat: {
-      tempo: 138,
+      tempo: 108,
       bass: ['A1', 'A1', 0, 'A1', 'A1', 0, 'A1', 'A1', 'C2', 'C2', 0, 'C2', 'G2', 0, 'F2', 0],
       arp: ['A4', 'E4', 'A4', 'C4', 'E4', 'A4', 'E4', 'C4', 'C4', 'G4', 'C4', 'E4', 'G4', 'E4', 'D4', 'E4'],
       pad: [['A2', 'E3'], null, null, null, ['A2', 'E3'], null, null, null, ['C3', 'G3'], null, null, null, ['F2', 'C3'], null, null, null],
@@ -174,7 +174,7 @@ Z.audio = (function () {
     // bass
     const bn = p.bass[s]; if (bn && N[bn]) tone({ type: 'sawtooth', f: N[bn], t: when, dur: 0.24, g: 0.22, filter: 'lowpass', cutoff: 420, dest: musicGain });
     // arp (quieter, delayed feel)
-    const an = p.arp[s]; if (an && N[an]) tone({ type: 'square', f: N[an], t: when, dur: 0.16, g: 0.05, filter: 'lowpass', cutoff: 2200, dest: musicGain, reverb: true });
+    const an = p.arp[s]; if (an && N[an]) tone({ type: 'triangle', f: N[an], t: when, dur: 0.18, g: 0.028, filter: 'lowpass', cutoff: 1500, dest: musicGain, reverb: true });
     // pad on downbeats
     const pd = p.pad[s]; if (pd) pd.forEach((nn) => { if (N[nn]) tone({ type: 'sine', f: N[nn], t: when, dur: 0.9, g: 0.05, atk: 0.15, dest: musicGain, reverb: true }); });
     // drums

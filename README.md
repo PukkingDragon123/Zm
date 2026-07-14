@@ -1,82 +1,71 @@
-# MY ULTIMATE ZUMO-BOT
+# ZUMO — STREET SCRAPPERS
 
-**A polished 2D neon-noir cyberpunk game about building sumo battle-bots out of scrap.**
+**A gritty post-apocalyptic street game about building junk battle-bots and brawling up the block.**
 
-Scavenge parts from the trash, weld a fighting machine in a deep slot-based workshop,
-and shove rival bots out of a glowing ring (or grind them to slag) across an 8-tier
-underground circuit. Earn credits, climb the ranks, run contracts, and dethrone the
-reigning champion — **Apex-Zero** — to become the Ultimate Zumo.
+After the grid went dark, the kids of Block 7 rebuilt the only thing worth
+fighting over: scrap battle-bots. Walk the strip, weld a scrapper at your bench,
+and brawl your way from gutter nobody to king of the Pit.
 
-> Scavenge. Weld. Ring Them Out.
+Self-contained web game — **vanilla JS + HTML5 Canvas, no build step, no dependencies.**
+Open `index.html` on any static host (works on GitHub Pages).
 
 ## Play
 
-It's a self-contained web game — **no build step, no dependencies**.
+- **The strip** — a side-scrolling street. Walk with **A / D** (or the on-screen
+  `<` `>` pad). Stop at a shop and press **W / ENTER** to go in. Chat to NPCs.
+- **Home / the bench** — a hands-on workbench: **drag junk parts onto your bot**
+  (heavy parts swing — physics), drop them on a mount to bolt them in, or in the
+  scrap bin to sell. Balance weight, power and the energy budget live.
+- **Tanaka's** — buy parts with cash or scrap; sell spares.
+- **Ol' Boy Ramen** — buy a bowl for a one-fight buff.
+- **Scrap Alley** — push-your-luck dig for free parts; bank before a mine hits.
+- **The Job Board** — contracts for cash, scrap and rank.
+- **The Pit** — pick a rival and brawl.
 
-- **Online:** open `index.html` on any static host (works out of the box on GitHub Pages).
-- **Locally:** serve the folder and open it, e.g.
+## The Pit (battle)
 
-  ```bash
-  python3 -m http.server 8000
-  # then visit http://localhost:8000
-  ```
+Side-view 2D brawls. You and the rival each stand at the edge holding a
+controller while your bots fight in front of a crowd.
 
-  (A local static server is recommended over `file://` so the browser fonts load.)
+| Action | Keyboard | On-screen pad |
+|---|---|---|
+| Move | A / D (or arrows) | `<` `>` |
+| Attack | J | HIT |
+| Skill (heavy special) | K | SKL |
+| Block | L / Shift (hold) | BLK |
 
-Progress is saved automatically to your browser's `localStorage`.
+Drop the rival's HP to zero for a knockout. Climb eight tiers of rival to
+dethrone **Apex-Zero** and become king of the block.
 
-## Controls
+## Look & feel
 
-| Action | Keyboard | Gamepad | Touch |
-|---|---|---|---|
-| Move | `WASD` / Arrows | Left stick | On-screen stick |
-| **Boost** (ring-out tool) | `Space` | `A` | `FIRE` button |
-| **Brace** (resist a shove) | `Shift` | `B` / `LT` | `BRACE` button |
+Gritty post-apocalyptic street: dusty amber dusk, rusted steel and concrete,
+hand-painted signs, dim broken neon. Pixel fonts, heavy grain and haze, no
+flashy holo-UI. Everything (world, bots, effects, part icons) is drawn
+procedurally on canvas; audio is synthesized live.
 
-Weapons engage automatically on contact; a boost also commits a burst weapon strike.
+**Add your own art:** the world/characters/battle render as layered placeholders
+you can replace with PNGs — see [`assets/README.md`](assets/README.md). Drop files
+in and they appear automatically; no code changes.
 
-## Gameplay
-
-- **Scavenge** — The Rust Midden is a *push-your-luck* dig: uncover scrap, credits and
-  parts. Deeper digs pay richer, but the hazards multiply — bank your haul before a
-  core-mine wipes it.
-- **Build** — Fit a chassis + generator, motor, wheels, weapons, armor plates and utility
-  modules. Every stat has a cost: weight vs. speed, armor vs. mobility, and a hard
-  **energy budget** (over-draw your generator and the whole rig throttles). The bot in the
-  workshop is drawn procedurally — it *is* the machine you assembled.
-- **Fight** — Top-down momentum sumo in a neon dohyō. Win by **ring-out** (shove the rival
-  past the rim) or **knockout** (deplete HP). Own the center; after 25 seconds the ring
-  **shrinks** and squeezes campers out. Full game-feel: hit-stop, scaled screen-shake,
-  ring-out slow-mo, sparks, damage numbers, and a rim-danger tell.
-- **Progress** — Beat rivals for purse + rank points, clear **Contracts** (quests), unlock
-  better gear tier by tier, and work your way up the ranked ladder to #1.
-
-## Tech
-
-Vanilla JavaScript + HTML5 Canvas, one global `Z` namespace, classic scripts loaded in
-order. All art (the atmospheric cyberpunk scene, every bot, part icons) is rendered
-procedurally on canvas; music and SFX are synthesized live with the Web Audio API. No
-images, no external libraries.
+## Files
 
 ```
-index.html          screens + canvas + script order
-css/style.css        holographic cyberpunk UI
-js/util.js           math / dom / color / event bus
-js/audio.js          procedural darksynth music + SFX
-js/data.js           all content: chassis, parts, rivals, ranks, contracts, style
-js/save.js           localStorage persistence
-js/state.js          game state, currencies, rank/RP
-js/bot.js            build model + stat computation + fighter spec
-js/fx.js             particles, shake, hit-stop, slow-mo, damage numbers
-js/render.js         atmospheric scene + procedural bot renderer
-js/ui.js             screen manager, action router, HUD, toasts, tooltips
-js/workshop.js       the build screen
-js/scavenge.js       the Rust Midden dig
-js/shop.js           the Chop-Shop Bazaar
-js/quests.js         Contracts
-js/ladder.js         ranked ladder + pre-fight
-js/combat.js         the Neon Dohyō (physics, AI, weapons, camera, juice)
-js/game.js           bootstrap + main loop
+index.html            screens + canvas + script order
+css/style.css         pixel / gritty stylesheet
+js/util.js            math / dom / color / event bus
+js/assets.js          layered image loader (+ placeholders)
+js/audio.js           synthesized music + SFX
+js/data.js            content: parts, rivals, ranks, jobs, buildings, npcs, ramen
+js/save.js  state.js  persistence + game state
+js/bot.js             build model + stat computation
+js/fx.js              particles, shake, hit-stop, slow-mo, damage numbers
+js/render.js          street ambient + side-view bot renderer + pixel text
+js/controls.js        keyboard + on-screen pad (move/hit/skill/block)
+js/ui.js              screen manager, money HUD, toasts, tooltips
+js/overworld.js       the side-scrolling strip
+js/workbench.js       physics-drag build bench
+js/shop.js ramen.js scavenge.js quests.js ladder.js   the interiors
+js/combat.js          The Pit — side-view brawl, crowd, operators, VFX
+js/game.js            bootstrap + main loop
 ```
-
-Enjoy the climb, Zumo.

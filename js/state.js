@@ -13,6 +13,7 @@ Z.state = (function () {
     claimedQuests: {},    // { questId: true }
     tutorialSeen: false,
     scavengeCost: 40,
+    buff: null,           // { hpMul, powMul, name } — consumed on next fight
     stats: {
       wins: 0, losses: 0, ringOuts: 0, koFinishes: 0, noDamageWins: 0,
       rareFinds: 0, currentStreak: 0, bestStreak: 0, earnedTotal: 0,
@@ -27,7 +28,7 @@ Z.state = (function () {
     s.inventory = JSON.parse(JSON.stringify(st.inventory));
     s.build = JSON.parse(JSON.stringify(st.build));
     s.botName = st.botName;
-    s.beaten = {}; s.claimedQuests = {}; s.tutorialSeen = false; s.scavengeCost = 40;
+    s.beaten = {}; s.claimedQuests = {}; s.tutorialSeen = false; s.scavengeCost = 40; s.buff = null;
     s.stats = { wins: 0, losses: 0, ringOuts: 0, koFinishes: 0, noDamageWins: 0, rareFinds: 0, currentStreak: 0, bestStreak: 0, earnedTotal: 0, winsByWeapon: {}, matches: 0 };
   }
 
@@ -45,6 +46,7 @@ Z.state = (function () {
       s.claimedQuests = saved.claimedQuests || {};
       s.tutorialSeen = !!saved.tutorialSeen;
       s.scavengeCost = saved.scavengeCost || 40;
+      s.buff = saved.buff || null;
       if (saved.stats) Object.assign(s.stats, saved.stats);
       migrateBuild();
     } else {
@@ -166,6 +168,9 @@ Z.state = (function () {
     get settings() { return s.settings; },
     get tutorialSeen() { return s.tutorialSeen; }, set tutorialSeen(v) { s.tutorialSeen = v; },
     get scavengeCost() { return s.scavengeCost; }, set scavengeCost(v) { s.scavengeCost = v; },
+    get buff() { return s.buff; },
+    setBuff(b) { s.buff = b; persist(); },
+    takeBuff() { const b = s.buff; s.buff = null; persist(); return b; },
     init, fresh, persist, persistSettings, reset, migrateBuild,
     addCredits, spend, addScrap,
     invCount, addItem, removeItem, equippedCount, availableCount,

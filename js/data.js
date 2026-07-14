@@ -7,10 +7,11 @@ Z.data = (function () {
 
   // Unified palette used by the canvas renderer (kept in sync with CSS vars).
   const PAL = {
-    bg: '#05070d', bg2: '#0a0f1c',
-    neonA: '#1ff7ff', neonB: '#ff2bd6', neonC: '#c6ff36',
-    purple: '#9b5cff', warn: '#ff7a18', gold: '#ffcf4d',
-    metal: '#8aa0b6', ink: '#dff6ff', dim: '#7d93ad',
+    bg: '#100d0a', bg2: '#1a1611',
+    neonA: '#e8a33d', neonB: '#a6552f', neonC: '#5f8f83',
+    purple: '#7a5a3a', warn: '#c23b2f', gold: '#d9a441',
+    metal: '#8a8577', ink: '#e6ddcd', dim: '#9b8f79',
+    amber: '#e8a33d', rust: '#a6552f', teal: '#5f8f83', red: '#c23b2f', steel: '#8a8577', concrete: '#3a3630',
   };
 
   const RARITY = {
@@ -21,8 +22,8 @@ Z.data = (function () {
     legendary: { i: 4, color: '#ffcf4d', label: 'LEGENDARY' },
   };
 
-  const CAT_ICON = { chassis: '🤖', generator: '🔋', motor: '⚙️', wheels: '⭗', weapon: '⚔️', armor: '🛡️', utility: '🧩' };
-  const WPN_ICON = { spinner: '✺', hammer: '🔨', flipper: '⤴', blade: '🗡', flamer: '🔥', none: '—' };
+  const CAT_ICON = { chassis: 'FRM', generator: 'GEN', motor: 'MOT', wheels: 'WHL', weapon: 'WPN', armor: 'ARM', utility: 'UTL' };
+  const WPN_ICON = { spinner: 'SPN', hammer: 'HMR', flipper: 'FLP', blade: 'BLD', flamer: 'FLM', none: '-' };
   const WPN_LABEL = { spinner: 'SPINNER', hammer: 'HAMMER', flipper: 'FLIPPER', blade: 'BLADE', flamer: 'FLAMER', none: 'UNARMED' };
 
   // ---------------- CHASSIS ----------------
@@ -156,9 +157,9 @@ Z.data = (function () {
 
   // ---------------- STYLE / COPY ----------------
   const style = {
-    styleFormula: 'Top-down 2D neon-noir cyberpunk: rain-slicked black asphalt reflecting teal-cyan and magenta neon; chrome-and-rusted-steel sumo battle-bots with exposed wiring and glowing energy cores; holographic HUD, scanlines, chromatic-aberration glitch, volumetric haze, drifting sparks; hot neon rim-light, wet specular highlights, heavy bloom, film grain.',
+    styleFormula: 'Gritty post-apocalyptic street: dusty amber dusk over concrete and rusted corrugated steel, hand-painted shop signs, tarps and junk piles, warm sodium lamps and dim broken neon; 2D pixel-art side view, muted earthy palette, heavy grain and haze, lived-in and grimy — not flashy.',
     palette: { bg: '#070A0F', neonA: '#17E9E0', neonB: '#FF2E88', neonC: '#9B5CFF', warn: '#FF7A18', metal: '#8593A3' },
-    worldLore: 'Beneath the flooded lower districts of a dead megacity, black-market current runs to one thing: the Zumo circuit, where scavengers weld war out of other people’s garbage and shove each other off a glowing ring for Credits and rank.',
+    worldLore: 'After the grid went dark, the kids of Block 7 rebuilt the only thing worth fighting over: junk battle-bots. Walk the strip, weld a scrapper at your bench, and brawl your way up from gutter nobody to king of the Pit.',
     uiCopy: {
       gameTitle: 'MY ULTIMATE ZUMO-BOT',
       subtitle: 'Scavenge. Weld. Ring Them Out.',
@@ -198,6 +199,30 @@ Z.data = (function () {
     audioBrief: 'Dark synthwave soaked in rain and rust; 88 BPM in the garage, 124 BPM adrenal combat.',
   };
 
+  // ---------------- overworld (the strip) ----------------
+  // x = world position along the side-scrolling street.
+  const STREET_LEN = 4200;
+  const BUILDINGS = [
+    { id: 'house',   x: 520,  w: 300, asset: 'bld.house',   label: 'HOME',        screen: 'workbench', sign: 'HOME · BENCH' },
+    { id: 'toyshop', x: 1200, w: 320, asset: 'bld.toyshop', label: "TANAKA'S",    screen: 'shop',      sign: 'TOY & SCRAP' },
+    { id: 'ramen',   x: 1900, w: 300, asset: 'bld.ramen',   label: 'RAMEN',       screen: 'ramen',     sign: "OL' BOY RAMEN" },
+    { id: 'board',   x: 2520, w: 200, asset: 'bld.board',   label: 'JOBS',        screen: 'quests',    sign: 'JOB BOARD' },
+    { id: 'scrap',   x: 3150, w: 320, asset: 'bld.scrap',   label: 'SCRAP ALLEY', screen: 'scavenge',  sign: 'SCRAP ALLEY' },
+    { id: 'arena',   x: 3850, w: 360, asset: 'bld.arena',   label: 'THE PIT',     screen: 'ladder',    sign: 'THE PIT' },
+  ];
+  const NPCS = [
+    { id: 'n1', x: 900,  asset: 'npc.a', line: 'You building a scrapper? The Pit eats rookies for breakfast.' },
+    { id: 'n2', x: 1650, asset: 'npc.b', line: 'Tanaka gets the good junk on Tuesdays. Rest is rust.' },
+    { id: 'n3', x: 2900, asset: 'npc.c', line: 'Dig the alley if you want parts free — mind the live wires.' },
+    { id: 'n4', x: 3600, asset: 'npc.a', line: 'Apex-Zero ain’t never lost. You won’t be the first, kid.' },
+  ];
+  // ramen buffs the NEXT fight (no persistent HP model — food = pre-fight prep)
+  const RAMEN = [
+    { id: 'cup',    name: 'Cheap Cup',    price: 20,  hpMul: 1.08, powMul: 1.0,  desc: 'Instant noodles. A little armor in your belly before the Pit.' },
+    { id: 'pork',   name: 'Pork Bowl',    price: 60,  hpMul: 1.16, powMul: 1.06, desc: 'Ol’ Boy’s house bowl — steadies the hands and the hull.' },
+    { id: 'deluxe', name: 'Deluxe Ramen', price: 150, hpMul: 1.28, powMul: 1.12, desc: 'The works. Fight on a full tank; hit like you mean it.' },
+  ];
+
   // ---------------- lookups ----------------
   const _partMap = {}; parts.forEach((p) => (_partMap[p.id] = p));
   const _chaMap = {}; chassis.forEach((c) => (_chaMap[c.id] = c));
@@ -229,6 +254,7 @@ Z.data = (function () {
   return {
     PAL, RARITY, CAT_ICON, WPN_ICON, WPN_LABEL,
     chassis, parts, enemies, ranks, quests, style, START,
+    BUILDINGS, NPCS, RAMEN, STREET_LEN,
     partById, chassisById, enemyById, itemById, rarityColor, rarityRank,
   };
 })();

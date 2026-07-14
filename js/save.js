@@ -32,6 +32,7 @@ Z.save = (function () {
         stats: state.stats,
         tutorialSeen: state.tutorialSeen,
         scavengeCost: state.scavengeCost,
+        buff: state.buff,
       };
       localStorage.setItem(KEY, JSON.stringify(snapshot));
       return true;
