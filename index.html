@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#05070d" />
+<title>MY ULTIMATE ZUMO-BOT</title>
+<meta name="description" content="Build sumo battle-bots from scavenged scrap and fight your way to #1 in a neon-drenched cyberpunk underground." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='88'%3E%F0%9F%A4%96%3C/text%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<!-- Living cyberpunk background + game canvas -->
+<canvas id="stage"></canvas>
+
+<!-- CRT / post overlays -->
+<div id="scanlines"></div>
+<div id="vignette"></div>
+<div id="grain"></div>
+<div id="flash"></div>
+
+<!-- Root UI layer -->
+<div id="ui">
+
+  <!-- ============ BOOT ============ -->
+  <section class="screen" data-screen="boot">
+    <div class="boot-wrap">
+      <div class="boot-logo glitch" data-text="ZUMO://">ZUMO://</div>
+      <div class="boot-bar"><i></i></div>
+      <div class="boot-log" id="bootLog"></div>
+    </div>
+  </section>
+
+  <!-- ============ TITLE ============ -->
+  <section class="screen" data-screen="title">
+    <div class="title-wrap">
+      <div class="title-kicker" id="titleKicker">UNDERGROUND SCRAPYARD CIRCUIT</div>
+      <h1 class="title glitch" data-text="MY ULTIMATE ZUMO-BOT">MY ULTIMATE<br><span>ZUMO-BOT</span></h1>
+      <p class="title-sub" id="titleSub">Scavenge the trash. Weld a monster. Push them out of the ring.</p>
+      <div class="title-menu">
+        <button class="btn big" data-act="play">JACK IN <em>▶</em></button>
+        <button class="btn ghost" data-act="how">HOW TO PLAY</button>
+        <button class="btn ghost" data-act="reset">WIPE SAVE</button>
+      </div>
+      <div class="title-foot"><span id="verTag">v1.0</span> · a neon-noir bot-fighting game</div>
+    </div>
+  </section>
+
+  <!-- ============ HUB / GARAGE ============ -->
+  <section class="screen" data-screen="hub">
+    <header class="topbar">
+      <div class="brand" data-act="title">ZUMO<span>://</span></div>
+      <div class="wallet">
+        <div class="chip"><span class="chip-k">RANK</span><b id="hubRank">Scrapling</b></div>
+        <div class="chip"><span class="chip-k">₡</span><b id="hubCredits">0</b></div>
+        <div class="chip"><span class="chip-k">SCRAP</span><b id="hubScrap">0</b></div>
+        <button class="icon-btn" data-act="settings" title="Settings">⚙</button>
+      </div>
+    </header>
+
+    <div class="hub-grid">
+      <div class="hub-hero">
+        <div class="hub-hero-inner">
+          <div class="hub-bot-name" id="hubBotName">UNIT-01</div>
+          <div class="hub-bot-stage" id="hubBotStage"></div>
+          <div class="hub-bot-stats" id="hubBotStats"></div>
+        </div>
+      </div>
+      <nav class="hub-menu">
+        <button class="tile" data-act="workshop">
+          <span class="tile-ic">🔧</span><span class="tile-t">WORKSHOP</span>
+          <span class="tile-d">Assemble & tune your bot</span></button>
+        <button class="tile" data-act="scavenge">
+          <span class="tile-ic">♻</span><span class="tile-t">SCAVENGE</span>
+          <span class="tile-d">Dig the trash for parts</span></button>
+        <button class="tile" data-act="shop">
+          <span class="tile-ic">🛒</span><span class="tile-t">BLACK MARKET</span>
+          <span class="tile-d">Buy parts & chassis</span></button>
+        <button class="tile" data-act="quests">
+          <span class="tile-ic">◎</span><span class="tile-t">CONTRACTS</span>
+          <span class="tile-d">Run jobs for creds<em id="questPip"></em></span></button>
+        <button class="tile fight" data-act="ladder">
+          <span class="tile-ic">⚔</span><span class="tile-t">THE RING</span>
+          <span class="tile-d">Fight for rank & purse</span></button>
+      </nav>
+    </div>
+  </section>
+
+  <!-- ============ WORKSHOP ============ -->
+  <section class="screen" data-screen="workshop">
+    <header class="subbar">
+      <button class="back" data-act="hub">‹ GARAGE</button>
+      <h2>WORKSHOP</h2>
+      <div class="subbar-right"><span class="chip mini"><span class="chip-k">₡</span><b id="wsCredits">0</b></span></div>
+    </header>
+    <div class="workshop">
+      <div class="ws-viewport">
+        <div class="ws-stage" id="wsStage"></div>
+        <div class="ws-name-row">
+          <input id="wsBotName" class="botname-input" maxlength="16" spellcheck="false" />
+          <button class="btn tiny" data-act="randomName">⟳</button>
+        </div>
+        <div class="ws-meters" id="wsMeters"></div>
+      </div>
+      <div class="ws-slots" id="wsSlots"></div>
+      <div class="ws-inv">
+        <div class="ws-inv-head">
+          <span>INVENTORY</span>
+          <div class="ws-filter" id="wsFilter"></div>
+        </div>
+        <div class="ws-inv-list" id="wsInv"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SCAVENGE ============ -->
+  <section class="screen" data-screen="scavenge">
+    <header class="subbar">
+      <button class="back" data-act="hub">‹ GARAGE</button>
+      <h2>SCRAPYARD</h2>
+      <div class="subbar-right">
+        <span class="chip mini"><span class="chip-k">SCANS</span><b id="scvDigs">0</b></span>
+        <span class="chip mini"><span class="chip-k">₡</span><b id="scvCredits">0</b></span>
+      </div>
+    </header>
+    <div class="scavenge">
+      <div class="scv-hint" id="scvHint">Tap the junk piles to dig. Watch your scans — and watch for hazards.</div>
+      <div class="scv-grid" id="scvGrid"></div>
+      <div class="scv-actions">
+        <button class="btn" data-act="scvNew">NEW YARD (<span id="scvCost">40</span>₡)</button>
+        <div class="scv-haul" id="scvHaul"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SHOP ============ -->
+  <section class="screen" data-screen="shop">
+    <header class="subbar">
+      <button class="back" data-act="hub">‹ GARAGE</button>
+      <h2>BLACK MARKET</h2>
+      <div class="subbar-right"><span class="chip mini"><span class="chip-k">₡</span><b id="shopCredits">0</b></span></div>
+    </header>
+    <div class="shop">
+      <div class="shop-filter" id="shopFilter"></div>
+      <div class="shop-list" id="shopList"></div>
+    </div>
+  </section>
+
+  <!-- ============ QUESTS ============ -->
+  <section class="screen" data-screen="quests">
+    <header class="subbar">
+      <button class="back" data-act="hub">‹ GARAGE</button>
+      <h2>CONTRACTS</h2>
+      <div class="subbar-right"><span class="chip mini"><span class="chip-k">₡</span><b id="qCredits">0</b></span></div>
+    </header>
+    <div class="quests" id="questList"></div>
+  </section>
+
+  <!-- ============ LADDER ============ -->
+  <section class="screen" data-screen="ladder">
+    <header class="subbar">
+      <button class="back" data-act="hub">‹ GARAGE</button>
+      <h2>THE RING · RANKED LADDER</h2>
+      <div class="subbar-right"><span class="chip mini"><span class="chip-k">RANK</span><b id="ladRank">—</b></span></div>
+    </header>
+    <div class="ladder" id="ladderList"></div>
+  </section>
+
+  <!-- ============ PREFIGHT (VS) ============ -->
+  <section class="screen" data-screen="prefight">
+    <div class="vs-wrap">
+      <div class="vs-side left" id="vsLeft"></div>
+      <div class="vs-mid"><span class="vs-x glitch" data-text="VS">VS</span><div class="vs-arena" id="vsArena"></div></div>
+      <div class="vs-side right" id="vsRight"></div>
+      <div class="vs-cta">
+        <button class="btn big" data-act="startFight">FIGHT <em>⚔</em></button>
+        <button class="btn ghost" data-act="ladder">BACK OUT</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ COMBAT HUD ============ -->
+  <section class="screen" data-screen="combat">
+    <div class="combat-hud">
+      <div class="cb-bar left">
+        <div class="cb-name" id="cbNameL">YOU</div>
+        <div class="cb-hp"><i id="cbHpL"></i></div>
+        <div class="cb-en"><i id="cbEnL"></i></div>
+      </div>
+      <div class="cb-timer" id="cbTimer">60</div>
+      <div class="cb-bar right">
+        <div class="cb-name" id="cbNameR">RIVAL</div>
+        <div class="cb-hp"><i id="cbHpR"></i></div>
+        <div class="cb-en"><i id="cbEnR"></i></div>
+      </div>
+    </div>
+    <div class="cb-announce" id="cbAnnounce"></div>
+    <!-- Touch controls -->
+    <div class="touch" id="touch">
+      <div class="stick" id="stick"><div class="stick-nub" id="stickNub"></div></div>
+      <button class="fire-btn" id="fireBtn">FIRE</button>
+    </div>
+  </section>
+
+  <!-- ============ RESULT ============ -->
+  <section class="screen" data-screen="result">
+    <div class="result-wrap">
+      <div class="result-band" id="resultBand">VICTORY</div>
+      <div class="result-body" id="resultBody"></div>
+      <div class="result-cta">
+        <button class="btn big" data-act="rematch">REMATCH</button>
+        <button class="btn" data-act="ladder">LADDER</button>
+        <button class="btn ghost" data-act="hub">GARAGE</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SETTINGS ============ -->
+  <section class="screen" data-screen="settings">
+    <div class="settings-wrap">
+      <h2>SETTINGS</h2>
+      <label class="set-row"><span>Music</span><input type="range" id="setMusic" min="0" max="100" value="55"></label>
+      <label class="set-row"><span>SFX</span><input type="range" id="setSfx" min="0" max="100" value="80"></label>
+      <label class="set-row"><span>Screen shake</span><input type="checkbox" id="setShake" checked></label>
+      <label class="set-row"><span>CRT / scanlines</span><input type="checkbox" id="setCrt" checked></label>
+      <label class="set-row"><span>Rain</span><input type="checkbox" id="setRain" checked></label>
+      <div class="settings-cta">
+        <button class="btn" data-act="hubFromSettings">DONE</button>
+      </div>
+      <p class="set-note">Move: <b>WASD / Arrows / Left-Stick</b> · Weapon &amp; Boost: <b>Space / A-button / FIRE</b></p>
+    </div>
+  </section>
+
+  <!-- ============ HOW TO PLAY ============ -->
+  <section class="screen" data-screen="how">
+    <div class="how-wrap">
+      <h2>HOW TO PLAY</h2>
+      <div class="how-grid" id="howGrid"></div>
+      <button class="btn big" data-act="title">GOT IT</button>
+    </div>
+  </section>
+
+</div>
+
+<!-- Toast + tooltip layers -->
+<div id="toasts"></div>
+<div id="tip"></div>
+
+<!-- ================= SCRIPTS (classic, ordered) ================= -->
+<script src="js/util.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/data.js"></script>
+<script src="js/save.js"></script>
+<script src="js/state.js"></script>
+<script src="js/bot.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/render.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/workshop.js"></script>
+<script src="js/scavenge.js"></script>
+<script src="js/shop.js"></script>
+<script src="js/quests.js"></script>
+<script src="js/ladder.js"></script>
+<script src="js/combat.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
