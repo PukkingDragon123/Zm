@@ -16,11 +16,30 @@ Z.ui = (function () {
     if (current !== name) { const p = screenEl(current); if (p) p.classList.remove('active'); }
     current = name;
     screenEl(name).classList.add('active');
+    transition(name);
     // controller mode
     if (Z.controls) Z.controls.setMode(name === 'world' ? 'world' : name === 'battle' ? 'battle' : 'none');
     if (Z.audio) Z.audio.setMode(name === 'battle' ? 'combat' : 'menu');
     (enterHooks[name] || []).forEach((fn) => { try { fn(); } catch (e) { console.error(e); } });
     updateWallet();
+  }
+  const TITLES = {
+    world: ['BLOCK 7', 'the strip'], workbench: ['THE BENCH', 'home'], shop: ["TANAKA'S", 'toy & scrap'],
+    ramen: ["OL' BOY RAMEN", 'a hot bowl'], scavenge: ['SCRAP ALLEY', 'push your luck'],
+    quests: ['THE JOB BOARD', 'work for cash'], ladder: ['THE PIT', 'pick a scrap'],
+  };
+  let lastTitle = null;
+  function transition(name) {
+    if (name === 'boot') return;
+    const w = document.getElementById('wipe');
+    if (w) { w.classList.remove('run'); void w.offsetWidth; w.classList.add('run'); }
+    const tc = document.getElementById('titlecard'), title = TITLES[name];
+    if (tc && title && lastTitle !== name) {
+      document.getElementById('tcText').textContent = title[0];
+      document.getElementById('tcSub').textContent = title[1];
+      tc.classList.remove('show'); void tc.offsetWidth; tc.classList.add('show');
+    }
+    lastTitle = name;
   }
   function onEnter(name, fn) { (enterHooks[name] = enterHooks[name] || []).push(fn); }
   function registerAction(act, fn) { ACTIONS[act] = fn; }

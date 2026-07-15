@@ -50,7 +50,7 @@ Z.combat = (function () {
     const buff = Z.state.takeBuff && Z.state.takeBuff();
     if (buff) { P.maxHp = Math.round(P.maxHp * (buff.hpMul || 1)); P.hp = P.maxHp; P.power = Math.round(P.power * (buff.powMul || 1)); Z.ui.toast('Ramen kicked in: ' + buff.name, 'gold'); }
     phase = 'intro'; t = 0; matchT = 0; introT = 0; endT = 0; result = null;
-    crowd = null; crowdHype = 0;
+    crowd = null; crowdHype = 0; comboN = 0; comboT = 0;
     document.getElementById('bhpNameL').textContent = trunc(playerSpec.name, 12);
     document.getElementById('bhpNameR').textContent = trunc(enemy.name, 12);
     if (Z.audio) { Z.audio.startWhir(); }
@@ -58,7 +58,8 @@ Z.combat = (function () {
     announce('READY');
   }
   const trunc = (s, n) => (s.length > n ? s.slice(0, n - 1) + '.' : s);
-  function announce(txt) { const el = document.getElementById('announce'); if (!el) return; el.textContent = txt; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); }
+  let comboN = 0, comboT = 0;
+  function announce(txt, opts) { Z.fx.bigText(txt, Object.assign({ color: PAL.amber, size: 48, ring: true, ringColor: '#7fd4ff', y: 0.38 }, opts || {})); }
 
   function layout() {
     const W = Z.render.W, H = Z.render.H;
@@ -77,9 +78,10 @@ Z.combat = (function () {
 
     if (phase === 'intro') {
       introT += realDt;
-      if (introT > 1.4) { phase = 'fight'; announce('FIGHT!'); Z.fx.screenFlash(0.3, PAL.amber); Z.audio.sfx.countdown(0); }
+      if (introT > 1.4) { phase = 'fight'; announce('FIGHT!', { size: 60 }); Z.fx.screenFlash(0.4, PAL.amber); Z.fx.speedLines(0.3, PAL.amber); Z.fx.zoom(0.1, 0.4); Z.fx.transmute((P.x + E.x) / 2, stage.groundY - 30, 90, '#7fd4ff', 0.7); Z.audio.sfx.countdown(0); }
     } else if (phase === 'fight') {
       matchT += dt;
+      if (comboT > 0) { comboT -= dt; if (comboT <= 0) comboN = 0; }
       // face each other
       P.facing = E.x >= P.x ? 1 : -1; E.facing = P.x >= E.x ? 1 : -1;
       // player input
@@ -152,8 +154,13 @@ Z.combat = (function () {
     f.vx += f.facing * 260; // lunge
     if (f.wtype === 'hammer') f.anim.hammer = 1; if (f.wtype === 'flipper') f.anim.flip = 1;
     f.lastActT = t; if (f.isPlayer) opLeftPress = 1; else opRightPress = 1;
-    Z.fx.screenFlash(0.22, f.spec.accent); Z.audio.sfx.rank();
-    Z.fx.sparks(f.x + f.facing * f.halfW, stage.groundY - f.spec.radius, f.facing > 0 ? 0 : Math.PI, 10, f.spec.accent, 0.8, 300);
+    // FMA transmutation flourish
+    const tx = f.x + f.facing * 34, ty = stage.groundY - f.spec.radius;
+    Z.fx.transmute(tx, ty, 74, '#7fd4ff', 0.8);
+    Z.fx.speedLines(0.28, '#bfe9ff'); Z.fx.zoom(0.09, 0.36); Z.fx.screenFlash(0.3, '#8fd0ff');
+    if (f.isPlayer) Z.fx.bigText('TRANSMUTE', { color: '#bfe9ff', size: 30, ring: false, y: 0.26, dur: 0.9 });
+    Z.fx.sparks(tx, ty, f.facing > 0 ? 0 : Math.PI, 12, '#bfe9ff', 0.8, 320);
+    Z.audio.sfx.rank();
   }
 
   function inRange(f, opp) {
@@ -187,7 +194,15 @@ Z.combat = (function () {
     else {
       Z.fx.sparks(hx, hy, f.facing > 0 ? 0.4 : Math.PI - 0.4, blocked ? 4 : (skill ? 16 : 8), blocked ? PAL.teal : '#ffe6c0', 1.2, 260 + f.prof.kb);
       Z.fx.debris(hx, hy, skill ? 6 : 3, PAL.rust);
-      Z.fx.damage(hx, hy - 10, dmg, blocked ? PAL.teal : f.spec.accent, skill || f.wtype === 'hammer');
+      Z.fx.damage(hx, hy - 10, dmg, blocked ? PAL.teal : (skill ? '#bfe9ff' : f.spec.accent), skill || f.wtype === 'hammer');
+    }
+    // anime impact frames / alchemic lightning on the big hits
+    if (skill && !blocked) { Z.fx.lightning(f.x + f.facing * f.halfW, hy, opp.x, hy, '#bfe9ff'); Z.fx.impact(hx, hy, '#bfe9ff'); Z.fx.transmute(opp.x, hy, 52, '#7fd4ff', 0.55); }
+    else if (f.wtype === 'hammer' && !blocked) Z.fx.impact(hx, hy, '#ffd9a0');
+    // player combo tracking
+    if (!blocked && f.wtype !== 'flamer') {
+      if (f.isPlayer) { comboN++; comboT = 1.3; if (comboN === 3 || comboN === 5 || comboN === 8 || comboN === 12 || comboN === 18) Z.fx.bigText('x' + comboN + ' COMBO', { color: PAL.amber, size: 22, ring: false, y: 0.18, dur: 0.8 }); }
+      else { comboN = 0; comboT = 0; }
     }
     const shk = (f.prof.shake + (skill ? 5 : 0)) * (Z.state.settings.shake ? 1 : 0.001);
     Z.fx.addShake(shk); if (f.prof.hitstop || skill) Z.fx.doHitstop(skill ? 0.1 : f.prof.hitstop);
@@ -227,8 +242,9 @@ Z.combat = (function () {
     if (result) return;
     result = Object.assign({ win: outcome === 'win', ko: false, timeout: false }, info);
     phase = 'end'; endT = 0;
-    Z.fx.slowmo(0.3, 0.7); Z.fx.doHitstop(0.1); Z.fx.screenFlash(0.4, result.win ? PAL.amber : PAL.red);
-    announce(info.ko ? (result.win ? 'K.O.!' : 'WRECKED') : (result.win ? 'WINNER' : 'YOU LOSE'));
+    Z.fx.slowmo(0.3, 0.7); Z.fx.doHitstop(0.12); Z.fx.screenFlash(0.45, result.win ? PAL.amber : PAL.red);
+    Z.fx.speedLines(0.45, result.win ? PAL.amber : PAL.red); Z.fx.zoom(0.15, 0.7);
+    announce(info.ko ? (result.win ? 'K.O.!' : 'WRECKED') : (result.win ? 'WINNER' : 'YOU LOSE'), { size: 66, y: 0.4 });
     Z.audio.setWhir(0); Z.audio.sfx[result.win ? 'win' : 'lose']();
   }
   function finish() {
@@ -290,6 +306,7 @@ Z.combat = (function () {
     ctx.save();
     const sx = Z.state.settings.shake ? Z.fx.shakeX : 0, sy = Z.state.settings.shake ? Z.fx.shakeY : 0;
     ctx.translate(sx, sy);
+    const zz = Z.fx.getZoom(); if (zz !== 1) { ctx.translate(W / 2, H / 2); ctx.scale(zz, zz); ctx.translate(-W / 2, -H / 2); }
 
     // operators at the edges, holding controllers
     drawOperator(ctx, stage.left - 60, stage.groundY, 1, PAL.rust, opLeftPress, 'YOU');

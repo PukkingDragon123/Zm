@@ -11,9 +11,12 @@ Z.fx = (function () {
   let shakeX = 0, shakeY = 0;
   let hitstop = 0;       // seconds of frozen combat
   let slowT = 0, slowDur = 0, slowScale = 1;
+  let circles = [], arcs = [], texts = [];       // FMA alchemy VFX + effect text
+  let speedT = 0, speedDur = 0, speedColor = '#cfeaff';
+  let zoomT = 0, zoomDur = 0, zoomAmt = 0;
   const flashEl = () => document.getElementById('flash');
 
-  function reset() { particles = []; dmgNums = []; shake = 0; shakeMax = 0; hitstop = 0; slowT = 0; slowDur = 0; slowScale = 1; }
+  function reset() { particles = []; dmgNums = []; circles = []; arcs = []; texts = []; shake = 0; shakeMax = 0; hitstop = 0; slowT = 0; slowDur = 0; slowScale = 1; speedT = 0; zoomT = 0; zoomAmt = 0; }
 
   // ---- emitters ----
   function sparks(x, y, angle, count, color, spread = 1.1, speed = 260) {
@@ -49,6 +52,31 @@ Z.fx = (function () {
   }
   function popText(x, y, text, color) { dmgNums.push({ x, y, vy: -42, life: 1.1, max: 1.1, text, color, big: true }); }
 
+  // ---- FMA alchemy VFX + effect text ----
+  function transmute(x, y, r, color, dur) { circles.push({ x, y, r: r || 60, rot: U.rand(0, U.TAU), life: dur || 0.75, max: dur || 0.75, color: color || '#7fd4ff' }); }
+  function lightning(x1, y1, x2, y2, color) {
+    const seg = 8, pts = [];
+    for (let i = 0; i <= seg; i++) pts.push({ x: U.lerp(x1, x2, i / seg) + (i && i < seg ? U.rand(-14, 14) : 0), y: U.lerp(y1, y2, i / seg) + (i && i < seg ? U.rand(-14, 14) : 0) });
+    arcs.push({ pts, life: 0.16, max: 0.16, color: color || '#bfe9ff' });
+  }
+  function speedLines(dur, color) { speedT = speedDur = dur || 0.24; speedColor = color || '#cfeaff'; }
+  function zoom(amt, dur) { zoomAmt = amt || 0.06; zoomDur = zoomT = dur || 0.28; }
+  function getZoom() { if (zoomT <= 0 || zoomDur <= 0) return 1; return 1 + zoomAmt * Math.sin((zoomT / zoomDur) * Math.PI); }
+  function impact(x, y, color) { screenFlash(0.55, '#ffffff'); speedLines(0.22, color || '#ffffff'); zoom(0.08, 0.26); if (x != null) ring(x, y, color || '#ffffff', 8, 100, 0.3); }
+  function bigText(text, opts) {
+    opts = opts || {};
+    texts.push({ text, color: opts.color || '#e8a33d', size: opts.size || 40, dur: opts.dur || 1.1, life: opts.dur || 1.1, ring: !!opts.ring, ringColor: opts.ringColor || '#7fd4ff', y: opts.y != null ? opts.y : 0.4, sub: opts.sub || null, rot: 0 });
+  }
+
+  function drawAlchemy(ctx, x, y, r, color, rot, alpha) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = alpha; ctx.strokeStyle = color; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, U.TAU); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.82, 0, U.TAU); ctx.stroke();
+    for (let s = 0; s < 2; s++) { ctx.beginPath(); for (let i = 0; i < 3; i++) { const a = s * Math.PI + i / 3 * U.TAU - Math.PI / 2; const px = Math.cos(a) * r * 0.8, py = Math.sin(a) * r * 0.8; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.closePath(); ctx.stroke(); }
+    for (let i = 0; i < 12; i++) { const a = i / 12 * U.TAU; ctx.beginPath(); ctx.moveTo(Math.cos(a) * r * 0.82, Math.sin(a) * r * 0.82); ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); ctx.stroke(); }
+    ctx.restore();
+  }
+
   // ---- camera fx ----
   function addShake(amt) { shakeMax = Math.max(shakeMax, amt); shake = Math.max(shake, amt); }
   function doHitstop(sec) { hitstop = Math.max(hitstop, sec); }
@@ -74,6 +102,11 @@ Z.fx = (function () {
       slowT -= realDt;
       if (slowT <= 0) slowScale = 1; // snap back to full speed when it expires
     }
+    if (speedT > 0) speedT -= realDt;
+    if (zoomT > 0) zoomT -= realDt;
+    for (let i = circles.length - 1; i >= 0; i--) { const c = circles[i]; c.life -= realDt; c.rot += realDt * 2.6; if (c.life <= 0) circles.splice(i, 1); }
+    for (let i = arcs.length - 1; i >= 0; i--) { arcs[i].life -= realDt; if (arcs[i].life <= 0) arcs.splice(i, 1); }
+    for (let i = texts.length - 1; i >= 0; i--) { texts[i].life -= realDt; if (texts[i].life <= 0) texts.splice(i, 1); }
     // shake decay
     if (shake > 0) {
       shake = Math.max(0, shake - realDt * (shakeMax * 4 + 20));
@@ -133,14 +166,25 @@ Z.fx = (function () {
       }
     }
     ctx.globalAlpha = 1;
-    // damage numbers
+    // alchemy circles + lightning (world)
+    for (const c of circles) { const life = c.life / c.max; const grow = 1 + (1 - life) * 0.4; drawAlchemy(ctx, c.x, c.y, c.r * grow, c.color, c.rot, U.clamp(life < 0.35 ? life / 0.35 : life, 0, 1)); }
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (const a of arcs) {
+      const al = a.life / a.max;
+      ctx.strokeStyle = U.rgba(a.color, al); ctx.lineWidth = 2;
+      ctx.beginPath(); a.pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.stroke();
+      ctx.strokeStyle = U.rgba(a.color, al * 0.35); ctx.lineWidth = 6; ctx.stroke();
+    }
+    ctx.restore();
+    // damage numbers (pixel)
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     for (const d of dmgNums) {
       const a = U.clamp(d.life / d.max, 0, 1);
-      const size = d.big ? 26 : 18;
+      const pop = d.big ? (1 + (1 - a) * 0.0) : 1;
+      const size = (d.big ? 20 : 13) * (a > 0.85 ? 1.25 : 1);
       ctx.globalAlpha = a;
-      ctx.font = `900 ${size}px Orbitron, sans-serif`;
-      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)';
+      ctx.font = `${size}px "Press Start 2P", monospace`;
+      ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.85)';
       ctx.fillStyle = d.color;
       const txt = d.text != null ? d.text : ('-' + d.val);
       ctx.strokeText(txt, d.x, d.y); ctx.fillText(txt, d.x, d.y);
@@ -149,10 +193,37 @@ Z.fx = (function () {
     ctx.restore();
   }
 
+  // ---- screen-space overlay (speed lines + effect text). Call with no transform. ----
+  function renderScreen(ctx, W, H) {
+    if (speedT > 0) {
+      const a = speedT / speedDur; ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = U.rgba(speedColor, a * 0.5); ctx.lineWidth = 2;
+      const cx = W / 2, cy = H / 2, R = Math.hypot(W, H);
+      for (let i = 0; i < 30; i++) { const ang = i / 30 * U.TAU + (i % 5) * 0.4; const r0 = R * 0.32 * (0.6 + (i % 3) * 0.16); ctx.beginPath(); ctx.moveTo(cx + Math.cos(ang) * r0, cy + Math.sin(ang) * r0); ctx.lineTo(cx + Math.cos(ang) * R, cy + Math.sin(ang) * R); ctx.stroke(); }
+      ctx.restore();
+    }
+    for (const tx of texts) {
+      const p = 1 - tx.life / tx.dur; let scale = 1, alpha = 1, dy = 0;
+      if (p < 0.22) scale = U.ease.outBack(p / 0.22); if (p > 0.72) { alpha = 1 - (p - 0.72) / 0.28; dy = -(p - 0.72) / 0.28 * 22; }
+      const cx = W / 2, cy = H * tx.y + dy;
+      ctx.save(); ctx.translate(cx, cy); ctx.globalAlpha = U.clamp(alpha, 0, 1);
+      if (tx.ring) drawAlchemy(ctx, 0, 0, tx.size * 2.4 * scale, tx.ringColor, p * 3, U.clamp(alpha, 0, 1) * 0.9);
+      ctx.scale(scale, scale);
+      ctx.font = `${tx.size}px "Press Start 2P", monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = 6; ctx.strokeStyle = '#000'; ctx.strokeText(tx.text, 0, 0);
+      ctx.fillStyle = tx.color; ctx.fillText(tx.text, 0, 0);
+      const hw = tx.text.length * tx.size * 0.34;
+      ctx.strokeStyle = U.rgba(tx.ringColor, 0.85); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-hw, tx.size * 0.72); ctx.lineTo(hw, tx.size * 0.72); ctx.stroke();
+      if (tx.sub) { ctx.font = `${tx.size * 0.36}px "Press Start 2P", monospace`; ctx.lineWidth = 4; ctx.strokeStyle = '#000'; ctx.fillStyle = '#e6ddcd'; ctx.strokeText(tx.sub, 0, tx.size * 1.15); ctx.fillText(tx.sub, 0, tx.size * 1.15); }
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+
   return {
     reset, sparks, debris, smoke, ring, flame, burst, damage, popText,
     addShake, doHitstop, slowmo, screenFlash,
-    combatDt, timescale, update, render,
+    transmute, lightning, speedLines, zoom, getZoom, impact, bigText,
+    combatDt, timescale, update, render, renderScreen,
     get shakeX() { return shakeX; }, get shakeY() { return shakeY; },
     get particleCount() { return particles.length; },
   };

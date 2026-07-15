@@ -211,10 +211,16 @@ Z.data = (function () {
     { id: 'arena',   x: 3850, w: 360, asset: 'bld.arena',   label: 'THE PIT',     screen: 'ladder',    sign: 'THE PIT' },
   ];
   const NPCS = [
-    { id: 'n1', x: 900,  asset: 'npc.a', line: 'You building a scrapper? The Pit eats rookies for breakfast.' },
-    { id: 'n2', x: 1650, asset: 'npc.b', line: 'Tanaka gets the good junk on Tuesdays. Rest is rust.' },
-    { id: 'n3', x: 2900, asset: 'npc.c', line: 'Dig the alley if you want parts free — mind the live wires.' },
-    { id: 'n4', x: 3600, asset: 'npc.a', line: 'Apex-Zero ain’t never lost. You won’t be the first, kid.' },
+    { id: 'n1', x: 300,  asset: 'npc.b', line: 'Equivalent exchange, kid — you only get out what you weld in.' },
+    { id: 'n2', x: 900,  asset: 'npc.a', line: 'You building a scrapper? The Pit eats rookies for breakfast.' },
+    { id: 'n3', x: 1420, asset: 'npc.c', line: 'That alchemy glow when a bot skills? Gives me chills every time.' },
+    { id: 'n4', x: 1650, asset: 'npc.b', line: 'Tanaka gets the good junk on Tuesdays. Rest is rust.' },
+    { id: 'n5', x: 2120, asset: 'npc.a', line: 'Old Tanaka lost an arm to a spinner. Automail now. Respect the Pit.' },
+    { id: 'n6', x: 2760, asset: 'npc.c', line: 'Draw the circle right and the scrap obeys. Draw it wrong... boom.' },
+    { id: 'n7', x: 2900, asset: 'npc.b', line: 'Dig the alley if you want parts free — mind the live wires.' },
+    { id: 'n8', x: 3320, asset: 'npc.a', line: 'Nothing out here is free. To gain something, you gotta give something.' },
+    { id: 'n9', x: 3600, asset: 'npc.c', line: 'Apex-Zero ain’t never lost. You won’t be the first, kid.' },
+    { id: 'n10', x: 4050, asset: 'npc.b', line: 'Win the Pit and the whole block chants your name. Go on. Transmute.' },
   ];
   // ramen buffs the NEXT fight (no persistent HP model — food = pre-fight prep)
   const RAMEN = [

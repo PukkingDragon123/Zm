@@ -35,6 +35,7 @@ Z.game = (function () {
     else if (cur === 'battle' && Z.combat.active) Z.combat.render();
     else { Z.render.clear(); Z.render.ambient(clock); }
     if (cur === 'workbench') Z.workbench.draw(clock);
+    Z.fx.renderScreen(Z.render.ctx, Z.render.W, Z.render.H);
   }
 
   function init() {

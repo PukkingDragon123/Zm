@@ -8,7 +8,7 @@ Z.workbench = (function () {
   let cv, ctx, W = 0, H = 0, DPR = 1;
   let slots = [], tray = [], bin = null, chassisChip = null;
   let drag = null, hoverSlot = null, filter = 'all';
-  let boltFx = 0;
+  let bolt = null;
 
   function spec() { return Z.Bot.compute(Z.state.build).spec; }
 
@@ -100,8 +100,8 @@ Z.workbench = (function () {
   function setSlot(s, id) { const b = Z.state.build; if (s.cat === 'generator' || s.cat === 'motor' || s.cat === 'wheels') b[s.cat] = id; else b[s.cat][s.index] = id; }
   function equip(s, id) {
     if (Z.state.availableCount(id) < 1) { Z.audio.sfx.error(); relayout(); return; }
-    setSlot(s, id); Z.state.persist(); boltFx = 1; Z.audio.sfx.buy();
-    Z.fx && Z.fx.sparks(s.x, s.y, 0, 5, PAL.amber, 1.2, 200);
+    setSlot(s, id); Z.state.persist(); Z.audio.sfx.buy();
+    bolt = { x: s.x, y: s.y, t: 0.7 };                 // transmutation flourish
     relayout(); readout();
   }
   function unequip(s) { setSlot(s, null); Z.state.persist(); readout(); }
@@ -180,7 +180,17 @@ Z.workbench = (function () {
     // dragged part on top
     if (drag) { chip(ctx, { item: drag.item, x: drag.x - 58, y: drag.y - 20, w: 116, h: 40, avail: 0 }, true); }
 
-    if (boltFx > 0) boltFx -= 0.05;
+    // transmutation flourish on bolt-in (FMA alchemy circle)
+    if (bolt) {
+      bolt.t -= 0.016; const life = Math.max(0, bolt.t / 0.7), r = 26 * (1 + (1 - life) * 0.9);
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = life; ctx.strokeStyle = '#7fd4ff'; ctx.lineWidth = 2;
+      ctx.translate(bolt.x, bolt.y); ctx.rotate((0.7 - bolt.t) * 6);
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, U.TAU); ctx.stroke();
+      for (let s = 0; s < 2; s++) { ctx.beginPath(); for (let i = 0; i < 3; i++) { const a = s * Math.PI + i / 3 * U.TAU - Math.PI / 2, px = Math.cos(a) * r * 0.8, py = Math.sin(a) * r * 0.8; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.closePath(); ctx.stroke(); }
+      ctx.restore();
+      Z.render.pxText(ctx, 'TRANSMUTE', bolt.x, bolt.y - r - 10, 9, '#bfe9ff', 'center');
+      if (bolt.t <= 0) bolt = null;
+    }
   }
 
   function chip(ctx, c, dragging) {

@@ -252,6 +252,17 @@ body.pad-on #pad.show{display:flex;}
 .toast.warn{border-color:var(--red);} .toast.gold{border-color:var(--gold); color:var(--gold);}
 @keyframes tst{0%{opacity:0;transform:translateY(-10px)}12%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}
 #tip{position:fixed; z-index:55; pointer-events:none; max-width:230px; padding:10px; background:#0b0805; border:2px solid var(--amber); font-size:15px; color:var(--ink); display:none; line-height:1.4;}
+
+/* screen-transition wipe + episode title card (indie polish) */
+#wipe{position:fixed; inset:0; z-index:48; pointer-events:none; background:var(--bg); transform:scaleX(0); transform-origin:left;}
+#wipe.run{animation:wipe .5s ease forwards;}
+@keyframes wipe{0%{transform:scaleX(0);transform-origin:left}46%{transform:scaleX(1);transform-origin:left}54%{transform:scaleX(1);transform-origin:right}100%{transform:scaleX(0);transform-origin:right}}
+#titlecard{position:fixed; left:0; right:0; top:32%; z-index:47; pointer-events:none; text-align:center; opacity:0;}
+#titlecard.show{animation:tcard 1.9s ease forwards;}
+#titlecard b{display:inline-block; font-family:var(--disp); font-size:clamp(15px,4vw,28px); color:var(--amber);
+  background:rgba(8,6,4,.85); border-top:3px solid var(--amber); border-bottom:3px solid var(--amber); padding:14px 26px; letter-spacing:2px; text-shadow:3px 3px 0 #000;}
+#titlecard i{display:block; font-style:normal; font-size:19px; color:var(--dim); margin-top:8px;}
+@keyframes tcard{0%{opacity:0;transform:translateX(-26px)}14%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0;transform:translateX(18px)}}
 #tip .tip-stat{color:var(--teal);} #tip .tip-neg{color:var(--red);}
 
 ::-webkit-scrollbar{width:10px;height:10px;}
