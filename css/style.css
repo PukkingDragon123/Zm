@@ -38,9 +38,11 @@ canvas{image-rendering:pixelated;}
   animation:grain 1.4s steps(3) infinite;}
 @keyframes grain{0%{transform:translate(0,0)}33%{transform:translate(-2%,1%)}66%{transform:translate(2%,-2%)}100%{transform:translate(-1%,2%)}}
 #vig{position:fixed; inset:0; z-index:41; pointer-events:none;
-  background:radial-gradient(130% 120% at 50% 42%, transparent 46%, rgba(0,0,0,.8) 100%);}
-#fog{position:fixed; inset:0; z-index:39; pointer-events:none; opacity:.5;
-  background:linear-gradient(180deg, rgba(20,14,8,.5), transparent 30%, transparent 70%, rgba(10,7,4,.7));}
+  background:radial-gradient(130% 120% at 50% 42%, transparent 44%, rgba(16,9,4,.82) 100%);}
+#fog{position:fixed; inset:0; z-index:39; pointer-events:none; opacity:.6;
+  background:
+    radial-gradient(90% 70% at 50% 38%, rgba(232,163,61,.06), transparent 62%),
+    linear-gradient(180deg, rgba(22,14,7,.55), transparent 28%, transparent 68%, rgba(9,6,3,.75));}
 #flash{position:fixed; inset:0; z-index:42; pointer-events:none; background:#fff; opacity:0;}
 body.no-crt #grain{display:none;}
 

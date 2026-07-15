@@ -35,7 +35,7 @@ Z.combat = (function () {
       power: spec.power, armor: spec.armor, halfW: spec.radius * 1.15,
       atkCd: 0, atkActive: 0, atkHit: false, atkKind: 'hit',
       skillCd: 0, skillCost: 34,
-      block: false, stun: 0, hitFlash: 0, moveInput: 0,
+      block: false, stun: 0, hitFlash: 0, moveInput: 0, dashT: 0,
       anim: { t: 0, spin: 0, wheel: 0, hammer: 0, flip: 0, moving: false },
       aggr: spec.aggression != null ? spec.aggression : 0.6, arche: spec.archetype || 'allrounder', think: 0,
       damaged: false, lastActT: -1,
@@ -115,9 +115,11 @@ Z.combat = (function () {
     f.x += f.vx * dt;
     f.anim.moving = canMove && Math.abs(f.moveInput) > 0.1;
     f.anim.wheel += (f.vx * dt) / 12;
+    if (f.dashT > 0) f.dashT -= dt;
+    if (f.anim.moving && f.y <= 0 && Math.random() < 0.25) Z.fx.dust(f.x - f.facing * f.halfW * 0.4, stage.groundY, 1, '#4a3f2d');
     // vertical (launch pop)
     f.y += f.vy * dt; f.vy -= 1800 * dt;
-    if (f.y <= 0) { if (f.vy < -60) { Z.fx.smoke(f.x, stage.groundY, '#3a3024', 2); Z.audio.sfx.hit(0.5); } f.y = 0; if (f.vy < 0) f.vy = 0; }
+    if (f.y <= 0) { if (f.vy < -60) { Z.fx.dust(f.x, stage.groundY, 5, '#5a4f3d'); Z.fx.addShake(1.5); Z.audio.sfx.hit(0.5); } f.y = 0; if (f.vy < 0) f.vy = 0; }
     // walls
     if (f.x < stage.left) { f.x = stage.left; if (f.vx < -160) { f.stun = Math.max(f.stun, 0.3); Z.fx.smoke(f.x, stage.groundY, '#3a3024', 3); Z.fx.addShake(2); } f.vx = 0; }
     if (f.x > stage.right) { f.x = stage.right; if (f.vx > 160) { f.stun = Math.max(f.stun, 0.3); Z.fx.smoke(f.x, stage.groundY, '#3a3024', 3); Z.fx.addShake(2); } f.vx = 0; }
@@ -151,7 +153,7 @@ Z.combat = (function () {
   function trySkill(f, opp) {
     if (f.skillCd > 0 || f.stun > 0 || f.block || f.energy < f.skillCost) { if (f.isPlayer && f.energy < f.skillCost) Z.audio.sfx.error(); return; }
     f.energy -= f.skillCost; f.skillCd = 3.5; f.atkKind = 'skill'; f.atkCd = f.prof.cd; f.atkActive = f.prof.active + 0.08; f.atkHit = false;
-    f.vx += f.facing * 260; // lunge
+    f.vx += f.facing * 260; f.dashT = 0.22; // lunge + afterimage
     if (f.wtype === 'hammer') f.anim.hammer = 1; if (f.wtype === 'flipper') f.anim.flip = 1;
     f.lastActT = t; if (f.isPlayer) opLeftPress = 1; else opRightPress = 1;
     // FMA transmutation flourish
@@ -197,8 +199,8 @@ Z.combat = (function () {
       Z.fx.damage(hx, hy - 10, dmg, blocked ? PAL.teal : (skill ? '#bfe9ff' : f.spec.accent), skill || f.wtype === 'hammer');
     }
     // anime impact frames / alchemic lightning on the big hits
-    if (skill && !blocked) { Z.fx.lightning(f.x + f.facing * f.halfW, hy, opp.x, hy, '#bfe9ff'); Z.fx.impact(hx, hy, '#bfe9ff'); Z.fx.transmute(opp.x, hy, 52, '#7fd4ff', 0.55); }
-    else if (f.wtype === 'hammer' && !blocked) Z.fx.impact(hx, hy, '#ffd9a0');
+    if (skill && !blocked) { Z.fx.lightning(f.x + f.facing * f.halfW, hy, opp.x, hy, '#bfe9ff'); Z.fx.impact(hx, hy, '#bfe9ff'); Z.fx.shockwave(hx, hy, '#bfe9ff', 160); Z.fx.transmute(opp.x, hy, 52, '#7fd4ff', 0.55); }
+    else if (f.wtype === 'hammer' && !blocked) { Z.fx.impact(hx, hy, '#ffd9a0'); Z.fx.shockwave(hx, hy, '#ffd9a0', 110); }
     // player combo tracking
     if (!blocked && f.wtype !== 'flamer') {
       if (f.isPlayer) { comboN++; comboT = 1.3; if (comboN === 3 || comboN === 5 || comboN === 8 || comboN === 12 || comboN === 18) Z.fx.bigText('x' + comboN + ' COMBO', { color: PAL.amber, size: 22, ring: false, y: 0.18, dur: 0.8 }); }
@@ -288,10 +290,13 @@ Z.combat = (function () {
       const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#1a130c'); g.addColorStop(1, '#0c0805'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
       // strung lamps
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
-      for (let i = 0; i < 8; i++) { const lx = (i + 0.5) * W / 8, ly = H * 0.16 + Math.sin(i) * 8; const gr = ctx.createRadialGradient(lx, ly, 2, lx, ly, 80); gr.addColorStop(0, U.rgba(PAL.amber, 0.5)); gr.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = gr; ctx.fillRect(lx - 80, ly - 80, 160, 160); }
+      for (let i = 0; i < 8; i++) { const fl = 0.5 + 0.15 * Math.sin(t * 3 + i * 1.7); const lx = (i + 0.5) * W / 8, ly = H * 0.16 + Math.sin(i) * 8; const gr = ctx.createRadialGradient(lx, ly, 2, lx, ly, 80); gr.addColorStop(0, U.rgba(PAL.amber, fl)); gr.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = gr; ctx.fillRect(lx - 80, ly - 80, 160, 160); ctx.fillStyle = '#e8b96a'; ctx.fillRect(lx - 2, ly - 2, 4, 4); }
+      // two sweeping spotlights
+      for (let k = 0; k < 2; k++) { const cx = W * (0.32 + 0.36 * k) + Math.sin(t * 0.4 + k * 2.2) * W * 0.16; const gc = ctx.createLinearGradient(cx, 0, cx, H * 0.86); gc.addColorStop(0, U.rgba(PAL.amber, 0.09)); gc.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = gc; ctx.beginPath(); ctx.moveTo(cx - 26, 0); ctx.lineTo(cx + 26, 0); ctx.lineTo(cx + 150, H * 0.86); ctx.lineTo(cx - 150, H * 0.86); ctx.closePath(); ctx.fill(); }
       ctx.restore();
     }
     drawCrowd(ctx, W, H);
+    Z.render.drawDust(t);   // ambient floating motes
     // floor
     if (!Z.assets.draw(ctx, 'battle.floor', 0, stage.groundY, W, H - stage.groundY, false)) {
       ctx.fillStyle = '#2b2419'; ctx.fillRect(0, stage.groundY, W, H - stage.groundY);
@@ -312,6 +317,12 @@ Z.combat = (function () {
     drawOperator(ctx, stage.left - 60, stage.groundY, 1, PAL.rust, opLeftPress, 'YOU');
     drawOperator(ctx, stage.right + 60, stage.groundY, -1, enemyDef ? enemyDef.color : PAL.red, opRightPress, '');
 
+    // wet-floor glow reflection under each bot
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    [P, E].forEach((f) => { const rg = ctx.createRadialGradient(f.x, stage.groundY + 6, 2, f.x, stage.groundY + 6, f.spec.radius * 1.7); rg.addColorStop(0, U.rgba(f.spec.accent, 0.16)); rg.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = rg; ctx.fillRect(f.x - f.spec.radius * 2, stage.groundY - 8, f.spec.radius * 4, 46); });
+    ctx.restore();
+    // dash afterimages
+    [E, P].forEach((f) => { if (f.dashT > 0) { const g = f.dashT / 0.22, r = f.spec.radius; ctx.save(); ctx.globalCompositeOperation = 'lighter'; for (let i = 1; i <= 3; i++) { ctx.globalAlpha = 0.12 * g / i; ctx.fillStyle = f.spec.accent; Z.render.roundRect(ctx, f.x - f.facing * i * 14 - r * 1.25, stage.groundY - f.y - r * 1.7, r * 2.5, r * 1.15, r * 0.28); ctx.fill(); } ctx.restore(); } });
     // bots
     Z.render.drawBotSide(E.x, stage.groundY - E.y, E.facing, E.spec, E.anim, { hpFrac: E.hp / E.maxHp, flash: E.hitFlash > 0 ? E.hitFlash / 0.12 * 0.8 : 0 });
     Z.render.drawBotSide(P.x, stage.groundY - P.y, P.facing, P.spec, P.anim, { hpFrac: P.hp / P.maxHp, flash: P.hitFlash > 0 ? P.hitFlash / 0.12 * 0.8 : 0 });
@@ -333,6 +344,10 @@ Z.combat = (function () {
       ctx.fillStyle = '#0f0b07'; ctx.fillRect(p.x + 3, base - p.h - 10 + bob, 10, 10); // head
       if (p.arm && crowdHype > 0.5) { ctx.fillStyle = p.c; ctx.fillRect(p.x + 5, base - p.h - 22 + bob, 4, 12); } // raised arm
     }
+    // glow signs / lighters in the crowd
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 7; i++) { const gx = (i + 0.5) * W / 7 + Math.sin(t + i) * 10, gy = base - 34 - (i % 2) * 10, fl = 0.35 + 0.65 * Math.abs(Math.sin(t * 3 + i * 2)), col = i % 2 ? PAL.amber : PAL.teal; const gr = ctx.createRadialGradient(gx, gy, 1, gx, gy, 18); gr.addColorStop(0, U.rgba(col, 0.55 * fl)); gr.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = gr; ctx.fillRect(gx - 18, gy - 18, 36, 36); }
+    ctx.restore();
     // haze over crowd
     const g = ctx.createLinearGradient(0, H * 0.42, 0, base); g.addColorStop(0, 'rgba(12,8,5,.6)'); g.addColorStop(1, 'rgba(12,8,5,0)'); ctx.fillStyle = g; ctx.fillRect(0, H * 0.42, W, base - H * 0.42);
   }

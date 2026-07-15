@@ -61,6 +61,10 @@ Z.overworld = (function () {
       ctx.strokeStyle = 'rgba(0,0,0,.4)'; ctx.lineWidth = 2;
       for (let x = -(camX % 120); x < W; x += 120) { ctx.beginPath(); ctx.moveTo(x, groundY + 18); ctx.lineTo(x + 40, H); ctx.stroke(); }
     }
+    // wet puddles reflecting the dusk
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 8; i++) { const wx = ((i * 733) % LEN) - camX; if (wx < -80 || wx > W + 80) continue; const g = ctx.createRadialGradient(wx, groundY + 28, 2, wx, groundY + 28, 64); g.addColorStop(0, U.rgba(PAL.amber, 0.07)); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(wx, groundY + 28, 62, 8, 0, 0, U.TAU); ctx.fill(); }
+    ctx.restore();
 
     // buildings
     for (const b of D.BUILDINGS) {
@@ -68,6 +72,19 @@ Z.overworld = (function () {
       if (sx + b.w < -40 || sx > W + 40) continue;
       if (!Z.assets.draw(ctx, b.asset, sx, by, b.w, bh, false)) drawFacade(ctx, b, sx, by, bh);
       Z.render.pxText(ctx, b.sign, sx + b.w / 2, by - 12, 11, near === b ? PAL.amber : PAL.dim, 'center');
+    }
+
+    // street lamps + warm light pools
+    for (let lx = 180; lx < LEN; lx += 360) {
+      const sx = lx - camX; if (sx < -40 || sx > W + 40) continue;
+      const fl = 0.72 + 0.28 * Math.sin(t * 6 + lx);
+      ctx.fillStyle = '#17110a'; ctx.fillRect(sx - 3, groundY - 150, 6, 150); ctx.fillRect(sx - 3, groundY - 150, 34, 6);
+      const bx = sx + 30, by = groundY - 150;
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      const gr = ctx.createRadialGradient(bx, by, 2, bx, by, 90); gr.addColorStop(0, U.rgba(PAL.amber, 0.5 * fl)); gr.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = gr; ctx.fillRect(bx - 90, by - 90, 180, 180);
+      const gp = ctx.createRadialGradient(bx, groundY + 12, 4, bx, groundY + 12, 120); gp.addColorStop(0, U.rgba(PAL.amber, 0.13 * fl)); gp.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = gp; ctx.beginPath(); ctx.ellipse(bx, groundY + 12, 120, 20, 0, 0, U.TAU); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = U.rgba('#ffd98a', fl); ctx.fillRect(bx - 3, by - 3, 6, 6);
     }
 
     // npcs
@@ -80,6 +97,10 @@ Z.overworld = (function () {
     // kid
     const kx = kid.x - camX;
     if (!Z.assets.draw(ctx, 'char.kid', kx - 22, groundY - 72, 44, 72, false)) drawKid(ctx, kx, groundY, kid.facing, kid.walk);
+
+    // foreground: sagging power lines for depth
+    ctx.strokeStyle = 'rgba(8,6,4,.8)'; ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i++) { const y0 = 34 + i * 24, sag = 28 + i * 12, ph = Math.sin(t * 0.3 + i) * 6; ctx.beginPath(); ctx.moveTo(0, y0); ctx.quadraticCurveTo(W / 2, y0 + sag + ph, W, y0 - 8); ctx.stroke(); }
 
     Z.render.drawDust(t);
   }

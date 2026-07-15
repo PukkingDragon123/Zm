@@ -46,6 +46,8 @@ Z.fx = (function () {
     }
   }
   function burst(x, y, color, n = 14) { sparks(x, y, 0, n, color, Math.PI, 320); ring(x, y, color); }
+  function shockwave(x, y, color, r1) { particles.push({ k: 'shock', x, y, r: 4, r1: r1 || 130, life: 0.42, max: 0.42, color: color || '#ffffff' }); }
+  function dust(x, y, n, color) { for (let i = 0; i < (n || 4); i++) particles.push({ k: 'smoke', x: x + U.rand(-9, 9), y: y + U.rand(-3, 3), vx: U.rand(-45, 45), vy: U.rand(-42, -8), life: U.rand(0.4, 0.85), max: 0.85, size: U.rand(3, 8), color: color || '#5a4f3d', drag: 1.3 }); }
 
   function damage(x, y, val, color, big) {
     dmgNums.push({ x: x + U.rand(-8, 8), y, vy: -60, life: big ? 1.1 : 0.8, max: big ? 1.1 : 0.8, val: Math.round(val), color, big: !!big });
@@ -119,7 +121,8 @@ Z.fx = (function () {
       const p = particles[i];
       p.life -= realDt;
       if (p.life <= 0) { particles.splice(i, 1); continue; }
-      if (p.k === 'ring') { p.r = U.lerp(p.r1, p.r, 1); p.r += (p.r1 - p.r) * Math.min(1, realDt * 8); continue; }
+      if (p.k === 'ring') { p.r += (p.r1 - p.r) * Math.min(1, realDt * 8); continue; }
+      if (p.k === 'shock') { p.r += (p.r1 - p.r) * Math.min(1, realDt * 7); continue; }
       const drag = p.drag != null ? p.drag : 1;
       p.vx -= p.vx * drag * realDt; p.vy -= p.vy * drag * realDt;
       if (p.k === 'debris') p.vy += 120 * realDt; // gravity-ish
@@ -150,6 +153,9 @@ Z.fx = (function () {
         ctx.stroke();
       } else if (p.k === 'ring') {
         ctx.globalAlpha = a * 0.7; ctx.strokeStyle = p.color; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, U.TAU); ctx.stroke();
+      } else if (p.k === 'shock') {
+        ctx.globalAlpha = a * 0.6; ctx.strokeStyle = p.color; ctx.lineWidth = U.lerp(9, 1, 1 - a);
         ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, U.TAU); ctx.stroke();
       }
     }
@@ -221,7 +227,7 @@ Z.fx = (function () {
 
   return {
     reset, sparks, debris, smoke, ring, flame, burst, damage, popText,
-    addShake, doHitstop, slowmo, screenFlash,
+    addShake, doHitstop, slowmo, screenFlash, shockwave, dust,
     transmute, lightning, speedLines, zoom, getZoom, impact, bigText,
     combatDt, timescale, update, render, renderScreen,
     get shakeX() { return shakeX; }, get shakeY() { return shakeY; },
