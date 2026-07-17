@@ -17,10 +17,13 @@ Z.game = (function () {
   function boot() {
     const bar = $('.boot-bar i'), log = $('#bootLog'); let i = 0, p = 0;
     $('#titleSub') && ($('#titleSub').textContent = D.LORE || D.style.worldLore);
+    const revealLine = () => { if (log && i < BOOT.length) { log.textContent += (log.textContent ? '\n' : '') + '> ' + BOOT[i]; i++; } };
+    const finish = () => { while (i < BOOT.length) revealLine(); setTimeout(() => Z.ui.show('title'), 450); };
     const iv = setInterval(() => {
       p = Math.min(100, p + U.rand(14, 28)); if (bar) bar.style.width = p + '%';
-      if (i < BOOT.length && p > (i + 1) * 20) { log.textContent += (log.textContent ? '\n' : '') + '> ' + BOOT[i]; i++; }
-      if (p >= 100 && i >= BOOT.length) { clearInterval(iv); setTimeout(() => Z.ui.show('title'), 450); }
+      // reveal lines spaced across the bar; last line lands just before 100%
+      if (i < BOOT.length && p >= (i + 1) * (100 / (BOOT.length + 1))) revealLine();
+      if (p >= 100) { clearInterval(iv); finish(); }
     }, 240);
   }
 
