@@ -11,6 +11,7 @@ Z.controls = (function () {
   let padEl, leftCluster, rightCluster;
 
   function onKey(e, down) {
+    if (Z.cutscene && Z.cutscene.active) return;   // scenes own the keys
     const c = e.code;
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(c)) e.preventDefault();
     switch (c) {
@@ -28,6 +29,7 @@ Z.controls = (function () {
     opts = opts || {};
     const b = U.el('button', 'pad-btn' + (cls ? ' ' + cls : ''), label);
     const set = (v) => {
+      if (v && Z.cutscene && Z.cutscene.active) return;
       b.classList.toggle('held', v);
       if (opts.hold) held[opts.hold] = v;
       if (v && opts.edge) { if (opts.edge === 'interact') interactQ = true; else if (opts.edge === 'attack') { attackQ = true; held.attack = true; } else if (opts.edge === 'skill') { skillQ = true; held.skill = true; } else if (opts.edge === 'jump') jumpQ = true; }

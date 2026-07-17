@@ -102,7 +102,18 @@ Z.quests = (function () {
     const def = repeat ? Object.assign({}, m, { rewardCredits: Math.round(m.rewardCredits / 2), rewardRp: Math.round(m.rewardRp / 3) }) : m;
     c.spec.name = Z.state.botName;
     Z.audio.sfx.click();
-    Z.combat.start(c.spec, first, { mission: { def, partner: chosenPartner[m.id] || null } });
+    const partnerId = chosenPartner[m.id] || null;
+    const partner = partnerId ? D.crewById(partnerId) : null;
+    const dist = D.districtById(m.district);
+    const go = () => Z.combat.start(c.spec, first, { mission: { def, partner: partnerId } });
+    if (repeat) { go(); return; }   // no briefing on sweeps
+    const scene = [
+      { who: m.client, text: m.desc },
+      partner ? { who: partner.name, img: partner.id, text: U.choice(partner.banter) } : null,
+      { who: first.name, evil: true, side: 'right', text: first.taunt },
+      { who: dist ? dist.name : 'THE JOB', text: (m.waves.length > 1 ? m.waves.length + ' waves of machines hold this place. ' : 'One machine holds this place. ') + 'Break them and bring it home.' },
+    ];
+    Z.cutscene.play(scene, go);
   }
 
   function renderBounties(host) {

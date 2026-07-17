@@ -24,7 +24,19 @@ Z.ladder = (function () {
     });
     Z.ui.updateWallet();
   }
-  function fight(en) { selected = en; Z.audio.sfx.click(); Z.combat.start(playerSpec(), en, { rp: rpFor(en) }); }
+  function fight(en) {
+    selected = en; Z.audio.sfx.click();
+    const go = () => Z.combat.start(playerSpec(), en, { rp: rpFor(en) });
+    if (en.isChampion && !Z.state.beaten[en.id]) {
+      Z.cutscene.play([
+        { who: 'Ao', img: 'ao', text: 'The flagship unit. Every puppet that faced it came home as firewood.' },
+        { who: en.name, evil: true, side: 'right', text: en.taunt },
+        { who: 'Ao', img: 'ao', text: 'Breathe. Parry what you can, jump what you cannot. The whole town is watching, tanuki.' },
+      ], go);
+    } else if (!Z.state.beaten[en.id]) {
+      Z.cutscene.play([{ who: en.name, evil: true, side: 'right', text: en.taunt }], go);
+    } else go();
+  }
   function init() { Z.ui.onEnter('ladder', render); Z.ui.registerAction('rematch', () => { if (selected) fight(selected); else Z.ui.show('ladder'); }); }
   return { init, render };
 })();

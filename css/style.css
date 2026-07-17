@@ -158,7 +158,9 @@ body.no-crt #grain{display:none;}
 .ramen-list{flex:1; overflow:auto; padding:12px 16px; display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; align-content:start; max-width:70%;}
 .dish{background:var(--paper); border:3px solid var(--ink); border-radius:14px 18px 12px 16px; padding:14px; box-shadow:3px 4px 0 rgba(35,22,10,.45);}
 .dish:nth-child(odd){transform:rotate(.6deg);} .dish:nth-child(even){transform:rotate(-.6deg);}
-.dish h3{font-family:var(--disp); font-size:14px; color:var(--verm); margin:0 0 6px;}
+.dish .d-head{display:flex; align-items:center; gap:10px; margin-bottom:6px;}
+.dish .d-ic{width:44px; height:44px; flex-shrink:0; background:var(--paper2); border:2px solid var(--ink); border-radius:10px;}
+.dish h3{font-family:var(--disp); font-size:14px; color:var(--verm); margin:0;}
 .dish p{font-size:14px; color:var(--ink2); margin:0 0 10px; min-height:40px; line-height:1.4;}
 .dish .d-foot{display:flex; justify-content:space-between; align-items:center;}
 .dish .d-price{font-family:var(--disp); font-size:14px; color:var(--gold);}
@@ -343,6 +345,31 @@ body.pad-on #pad.show{display:flex;}
 #tip{position:fixed; z-index:55; pointer-events:none; max-width:240px; padding:10px 12px; background:var(--paper); border:3px solid var(--ink);
   border-radius:12px 14px 10px 14px; font-size:13px; color:var(--ink); display:none; line-height:1.45; box-shadow:3px 4px 0 rgba(35,22,10,.5);}
 #tip .tip-stat{color:#33806f;} #tip .tip-neg{color:var(--red);}
+
+/* ---------- cutscenes: letterbox + typewriter dialogue ---------- */
+#cut{position:fixed; inset:0; z-index:58; display:none; pointer-events:auto; cursor:pointer;}
+#cut.show{display:block;}
+.cut-bar{position:absolute; left:0; right:0; height:0; background:#17100a; transition:height .4s ease;}
+.cut-bar.top{top:0;} .cut-bar.bot{bottom:0;}
+#cut.show .cut-bar{height:11vh;}
+.cut-box{position:absolute; left:50%; bottom:13vh; transform:translateX(-50%); width:min(720px,92vw);
+  padding:20px 22px 16px; border-radius:18px 22px 16px 20px;}
+.cut-box.pop{animation:talkPop .3s cubic-bezier(.34,1.56,.64,1);}
+.cut-name{font-family:var(--disp); font-size:14px; color:#fff7ea; background:var(--verm); display:inline-block;
+  padding:4px 16px; border-radius:10px; border:2px solid rgba(35,22,10,.5); position:absolute; top:-16px; left:16px; transform:rotate(-2deg);}
+.cut-img{position:absolute; right:16px; top:-104px; width:128px; height:118px; object-fit:contain;
+  filter:drop-shadow(4px 5px 0 rgba(35,22,10,.4)); animation:crewBob 2.1s ease-in-out infinite;}
+.cut-img.evil{filter:drop-shadow(4px 5px 0 rgba(35,22,10,.4)) saturate(.6);}
+.cut-box.right .cut-img{right:auto; left:16px;}
+.cut-box.right .cut-name{left:auto; right:16px; transform:rotate(2deg);}
+.cut-text{font-size:18px; line-height:1.55; color:var(--ink); min-height:56px; margin:8px 4px 4px;}
+.cut-next{position:absolute; right:18px; bottom:8px; font-family:var(--disp); font-size:11px; color:var(--ink2);
+  animation:hop2 1s ease-in-out infinite;}
+@keyframes hop2{50%{transform:translateY(-4px);}}
+
+/* low HP heartbeat on battle bars */
+.bhp-bar.lowhp i{animation:lowpulse .55s ease-in-out infinite;}
+@keyframes lowpulse{50%{filter:brightness(1.6) saturate(1.4);}}
 
 ::-webkit-scrollbar{width:11px;height:11px;}
 ::-webkit-scrollbar-thumb{background:#7a6647; border-radius:8px; border:2px solid #2a1c10;}

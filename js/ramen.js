@@ -20,9 +20,10 @@ Z.ramen = (function () {
       const active = Z.state.buff && Z.state.buff.id === dish.id;
       const card = U.el('div', 'dish');
       const hp = Math.round((dish.hpMul - 1) * 100), pw = Math.round((dish.powMul - 1) * 100);
-      card.innerHTML = `<h3>${dish.name}</h3><p>${dish.desc}</p>
+      card.innerHTML = `<div class="d-head"><canvas class="d-ic"></canvas><h3>${dish.name}</h3></div><p>${dish.desc}</p>
         <div class="d-foot"><span class="q-rew">+${hp}% HP${pw ? ' · +' + pw + '% PWR' : ''}</span>
         <span class="d-price">¥${dish.price}</span></div>`;
+      Z.render.drawFoodIcon(card.querySelector('.d-ic'), dish);
       const b = U.el('button', 'pbtn tiny', active ? 'READY' : 'EAT'); b.style.marginTop = '10px'; b.disabled = active || Z.state.credits < dish.price;
       b.addEventListener('click', () => buy(dish));
       card.appendChild(b);

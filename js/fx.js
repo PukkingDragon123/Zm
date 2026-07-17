@@ -47,6 +47,13 @@ Z.fx = (function () {
   }
   function burst(x, y, color, n = 14) { sparks(x, y, 0, n, color, Math.PI, 320); ring(x, y, color); }
   function shockwave(x, y, color, r1) { particles.push({ k: 'shock', x, y, r: 4, r1: r1 || 130, life: 0.42, max: 0.42, color: color || '#ffffff' }); }
+  function confetti(x, y, n) {
+    const cols = ['#d94f30', '#ffd98a', '#4fae9c', '#f2b8c6', '#f5ecd7', '#7f9e6a'];
+    for (let i = 0; i < (n || 22); i++) {
+      const a = U.rand(-Math.PI, 0), sp = U.rand(120, 420);
+      particles.push({ k: 'conf', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: U.rand(0.9, 1.8), max: 1.8, size: U.rand(3, 6), rot: U.rand(0, U.TAU), vr: U.rand(-8, 8), flut: U.rand(2, 6), color: U.choice(cols), drag: 0.9 });
+    }
+  }
   function dust(x, y, n, color) { for (let i = 0; i < (n || 4); i++) particles.push({ k: 'smoke', x: x + U.rand(-9, 9), y: y + U.rand(-3, 3), vx: U.rand(-45, 45), vy: U.rand(-42, -8), life: U.rand(0.4, 0.85), max: 0.85, size: U.rand(3, 8), color: color || '#5a4f3d', drag: 1.3 }); }
 
   function damage(x, y, val, color, big) {
@@ -138,6 +145,7 @@ Z.fx = (function () {
       const drag = p.drag != null ? p.drag : 1;
       p.vx -= p.vx * drag * realDt; p.vy -= p.vy * drag * realDt;
       if (p.k === 'debris') p.vy += 120 * realDt; // gravity-ish
+      if (p.k === 'conf') { p.vy += 260 * realDt; p.vx += Math.sin(p.life * p.flut * 4) * 30 * realDt; }
       if (p.k === 'smoke') p.size += 12 * realDt;
       p.x += p.vx * realDt; p.y += p.vy * realDt;
       if (p.rot != null) p.rot += (p.vr || 0) * realDt;
@@ -178,6 +186,11 @@ Z.fx = (function () {
         ctx.globalAlpha = a; ctx.fillStyle = p.color;
         ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot || 0);
         ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size); ctx.restore();
+      } else if (p.k === 'conf') {
+        ctx.globalAlpha = Math.min(1, a * 2); ctx.fillStyle = p.color;
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot || 0);
+        ctx.scale(1, 0.35 + 0.65 * Math.abs(Math.sin(p.life * p.flut * 3)));
+        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 1.4); ctx.restore();
       } else if (p.k === 'smoke') {
         ctx.globalAlpha = a * 0.32; ctx.fillStyle = p.color;
         ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, U.TAU); ctx.fill();
@@ -239,7 +252,7 @@ Z.fx = (function () {
 
   return {
     reset, sparks, debris, smoke, ring, flame, burst, damage, popText,
-    addShake, doHitstop, slowmo, screenFlash, shockwave, dust,
+    addShake, doHitstop, slowmo, screenFlash, shockwave, dust, confetti,
     transmute, lightning, speedLines, zoom, getZoom, impact, bigText,
     combatDt, timescale, update, render, renderScreen,
     get shakeX() { return shakeX; }, get shakeY() { return shakeY; },

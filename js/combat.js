@@ -15,6 +15,7 @@ Z.combat = (function () {
   let spirits = null;                    // floating spectator wisps
   let mission = null, waveIdx = 0, partner = null;
   let comboN = 0, comboT = 0;
+  let finisherFired = false, soul = null;
 
   const PROF = {
     spinner: { reach: 34, dmgMul: 0.55, cd: 0.18, kb: 70, active: 0.16, ecost: 2, hitstop: 0.02, shake: 1.4, launch: 0 },
@@ -38,8 +39,8 @@ Z.combat = (function () {
       power: spec.power, armor: spec.armor, halfW: spec.radius * 1.15,
       atkCd: 0, atkActive: 0, atkHit: false, atkKind: 'hit', atkAnim: 0,
       skillCd: 0, skillCost: 34,
-      block: false, stun: 0, hitFlash: 0, moveInput: 0, dashT: 0,
-      jumps: 0, turn: 0,
+      block: false, blockT0: -9, stun: 0, hitFlash: 0, moveInput: 0, dashT: 0,
+      jumps: 0, turn: 0, diving: false,
       anim: { t: 0, spin: 0, wheel: 0, hammer: 0, flip: 0, moving: false, attackT: 0 },
       aggr: spec.aggression != null ? spec.aggression : 0.6, arche: spec.archetype || 'allrounder', think: 0,
       damaged: false,
@@ -64,7 +65,7 @@ Z.combat = (function () {
       if (partner.id === 'tengu') P.power = Math.round(P.power * (1 + 0.05 * r));
     }
     phase = 'intro'; t = 0; matchT = 0; introT = 0; endT = 0; result = null;
-    spirits = null; crowdHype = 0; comboN = 0; comboT = 0;
+    spirits = null; crowdHype = 0; comboN = 0; comboT = 0; finisherFired = false; soul = null;
     document.getElementById('bhpNameL').textContent = trunc(playerSpec.name, 12);
     document.getElementById('bhpNameR').textContent = trunc(enemy.name, 14);
     Z.audio.startWhir(); Z.ui.show('battle');
@@ -105,7 +106,9 @@ Z.combat = (function () {
       matchT += dt;
       if (comboT > 0) { comboT -= dt; if (comboT <= 0) comboN = 0; }
       P.facing = E.x >= P.x ? 1 : -1; E.facing = P.x >= E.x ? 1 : -1;
+      const wasBlock = P.block;
       P.block = !!(Z.controls.held.block) && P.stun <= 0;
+      if (P.block && !wasBlock) P.blockT0 = t;
       const mi = P.block ? 0 : Z.controls.dir;
       if (mi && Math.sign(mi) !== Math.sign(P.moveInput || mi)) P.turn = 1;
       P.moveInput = mi;
@@ -154,7 +157,21 @@ Z.combat = (function () {
     // vertical
     f.y += f.vy * dt; f.vy -= 1900 * dt;
     if (f.y <= 0) {
-      if (f.vy < -80) { Z.fx.dust(f.x, stage.groundY, 6, '#cbb489'); Z.fx.addShake(1.6); f.landSquash = 0.3; Z.audio.sfx.hit(0.5); }
+      if (f.diving) {
+        f.diving = false;
+        const opp = f.isPlayer ? E : P;
+        Z.fx.shockwave(f.x, stage.groundY - 8, GOLD, 150); Z.fx.dust(f.x, stage.groundY, 12, '#cbb489');
+        Z.fx.addShake(6 * (Z.state.settings.shake ? 1 : 0.001)); Z.fx.doHitstop(0.07); Z.audio.sfx.hammer();
+        if (opp && opp.y <= 20 && Math.abs(opp.x - f.x) < f.prof.reach + f.halfW + opp.halfW + 26) {
+          let dmg = (f.wdmg * 0.9 + 6 + f.power * 0.16) * (1 - (opp.armor || 0) / 100) * (opp.block ? 0.35 : 1);
+          opp.hp -= dmg; if (opp.isPlayer) opp.damaged = true;
+          opp.vy += 360; opp.vx += f.facing * 220; opp.stun = Math.max(opp.stun, 0.3); opp.hitFlash = 0.12;
+          maybeFinish(f, opp, 0);
+          Z.fx.damage(opp.x, stage.groundY - opp.y - 90, dmg, GOLD, true);
+          if (f.isPlayer) Z.fx.bigText('SLAM!', { color: GOLD, size: 26, ring: false, y: 0.22, dur: 0.7 });
+          crowdHype = Math.min(1.4, crowdHype + 0.6);
+        }
+      } else if (f.vy < -80) { Z.fx.dust(f.x, stage.groundY, 6, '#cbb489'); Z.fx.addShake(1.6); f.landSquash = 0.3; Z.audio.sfx.hit(0.5); }
       f.y = 0; if (f.vy < 0) f.vy = 0;
     }
     if (f.landSquash > 0) f.landSquash -= dt * 2;
@@ -182,6 +199,12 @@ Z.combat = (function () {
 
   function tryAttack(f, opp) {
     if (!opp || f.atkCd > 0 || f.stun > 0 || f.block) return;
+    if (f.y > 26 && !f.diving) {           // aerial: dive slam
+      f.diving = true; f.vy = -980; f.vx += f.facing * 170;
+      Z.fx.speedLines(0.18, GOLD); Z.audio.sfx.boost();
+      if (f.isPlayer) opLeftPress = 1; else opRightPress = 1;
+      return;
+    }
     f.atkKind = 'hit'; f.atkCd = f.prof.cd; f.atkActive = f.prof.active; f.atkHit = false; f.atkAnim = 1;
     f.energy = Math.max(0, f.energy - f.prof.ecost);
     if (f.wtype === 'hammer') f.anim.hammer = 1; if (f.wtype === 'flipper') f.anim.flip = 1;
@@ -212,12 +235,30 @@ Z.combat = (function () {
     const hittable = f.wtype === 'flamer' ? true : !f.atkHit;
     if (!hittable || !inRange(f, opp)) return;
     const skill = f.atkKind === 'skill';
+    const blocked = opp.block;
+    // PERFECT PARRY: block raised within the last 0.2s deflects everything
+    if (blocked && f.wtype !== 'flamer' && (t - opp.blockT0) < 0.2) {
+      f.atkHit = true;
+      f.stun = Math.max(f.stun, 0.6); f.vx -= f.facing * 300; f.hitFlash = 0.1;
+      opp.energy = Math.min(opp.energyMax, opp.energy + 16);
+      const px = opp.x + opp.facing * opp.halfW, py = stage.groundY - opp.y - opp.spec.radius * 1.6;
+      Z.fx.ring(px, py, SPIRIT, 6, 90, 0.34); Z.fx.sparks(px, py, -Math.PI / 2, 14, SPIRIT, 1.4, 340);
+      Z.fx.doHitstop(0.1); Z.fx.addShake(3 * (Z.state.settings.shake ? 1 : 0.001));
+      Z.fx.bigText('PARRY!', { color: SPIRIT, size: 30, ring: false, y: 0.24, dur: 0.8 });
+      Z.audio.sfx.rank();
+      crowdHype = Math.min(1.4, crowdHype + 0.7);
+      return;
+    }
     let dmg = (f.wdmg * f.prof.dmgMul + 4 + f.power * 0.14);
     if (f.wtype === 'flamer') dmg *= dt * 8; else f.atkHit = true;
     if (skill) dmg *= 2.3;
-    const blocked = opp.block;
+    // COUNTER: catching them mid-swing hits harder
+    let countered = false;
+    if (!blocked && opp.atkActive > 0 && f.wtype !== 'flamer') { dmg *= 1.35; countered = true; }
     dmg *= (1 - (opp.armor || 0) / 100) * (blocked ? 0.28 : 1);
+    maybeFinish(f, opp, dmg);
     opp.hp -= dmg; if (opp.isPlayer) opp.damaged = true;
+    if (!blocked && f.wtype !== 'flamer') f.energy = Math.min(f.energyMax, f.energy + 3);   // aggression pays
     const kb = (f.prof.kb + (skill ? 220 : 0)) * (blocked ? 0.3 : 1);
     opp.vx += f.facing * kb;
     const launch = (f.prof.launch + (skill ? 160 : 0)) * (blocked ? 0.2 : 1);
@@ -233,6 +274,7 @@ Z.combat = (function () {
     }
     if (skill && !blocked) { Z.fx.lightning(f.x + f.facing * f.halfW, hy, opp.x, hy, SPIRIT); Z.fx.impact(hx, hy, SPIRIT); Z.fx.shockwave(hx, hy, SPIRIT, 160); Z.fx.transmute(opp.x, hy, 52, SPIRIT, 0.55); }
     else if (f.wtype === 'hammer' && !blocked) { Z.fx.impact(hx, hy, GOLD); Z.fx.shockwave(hx, hy, GOLD, 110); }
+    if (countered) Z.fx.damage(hx, hy - 34, 0, GOLD, false), Z.fx.popText(hx, hy - 34, 'COUNTER', GOLD);
     if (!blocked && f.wtype !== 'flamer') {
       if (f.isPlayer) { comboN++; comboT = 1.3; if ([3, 5, 8, 12, 18].includes(comboN)) Z.fx.bigText(comboN + ' HIT COMBO', { color: GOLD, size: 22, ring: false, y: 0.17, dur: 0.8 }); }
       else { comboN = 0; comboT = 0; }
@@ -243,6 +285,19 @@ Z.combat = (function () {
     Z.audio.sfx.hit(U.clamp(dmg / 26, 0.4, 2));
   }
 
+  // FINISH! — cinematic beat when a hit is about to break the puppet
+  function maybeFinish(f, opp, dmg) {
+    if (finisherFired || !opp || opp.hp - dmg > 0) return;
+    finisherFired = true;
+    Z.fx.slowmo(0.16, 0.9); Z.fx.zoom(0.2, 0.9); Z.fx.doHitstop(0.14);
+    Z.fx.screenFlash(0.5, '#fff7ea'); Z.fx.speedLines(0.6, GOLD);
+    Z.fx.bigText('FINISH!', { color: '#fff7ea', size: 58, ring: true, ringColor: GOLD, y: 0.36, dur: 1.2 });
+    const gx = opp.x, gy = stage.groundY - opp.y - opp.spec.radius * 1.6;
+    Z.fx.confetti(gx, gy - 30, 30); Z.fx.debris(gx, gy, 16, '#8b8fa3'); Z.fx.shockwave(gx, gy, GOLD, 220);
+    soul = { x: gx, born: t };
+    crowdHype = 1.4;
+  }
+
   // ---------- AI ----------
   function ai(f, opp, dt) {
     if (!f || phase !== 'fight') return;
@@ -250,7 +305,9 @@ Z.combat = (function () {
     const reach = f.prof.reach + f.halfW + opp.halfW;
     f.block = false;
     if (f.stun > 0) { f.moveInput = 0; return; }
-    if (opp.atkActive > 0 && dist < reach + 24 && Math.random() < (f.arche === 'tank' ? 0.14 : 0.05)) { f.block = true; f.moveInput = 0; return; }
+    if (opp.atkActive > 0 && dist < reach + 24 && Math.random() < (f.arche === 'tank' ? 0.14 : 0.05)) { if (!f.block) f.blockT0 = t; f.block = true; f.moveInput = 0; return; }
+    // cheeky cross-up hop over the player
+    if (f.y <= 0 && dist < reach * 0.9 && Math.random() < 0.008 + f.aggr * 0.006) { f.vy = 700; f.vx += dir * 260; Z.fx.dust(f.x, stage.groundY, 3, '#cbb489'); }
     // hop sometimes to dodge or close in (goofy)
     if (f.y <= 0 && f.think <= 0 && Math.random() < 0.05 + f.aggr * 0.04) { f.vy = 560; Z.fx.dust(f.x, stage.groundY, 3, '#cbb489'); }
     const want = reach * 0.85;
@@ -300,6 +357,7 @@ Z.combat = (function () {
       Z.ui.toast(partner.name + ' patches your puppet (+' + heal + ')', 'gold');
     } else if (partner) { P.hp = Math.min(P.maxHp, P.hp + Math.round(P.maxHp * 0.04)); }
     matchT = Math.max(0, matchT - 20);     // bonus time per wave
+    finisherFired = false; soul = null;
     phase = 'fight';
     announce('WAVE ' + (waveIdx + 1), { size: 52 });
     if (partner && partner.banter) Z.ui.toast(partner.name + ': "' + U.choice(partner.banter) + '"');
@@ -372,6 +430,21 @@ Z.combat = (function () {
     if (rankUps && rankUps.length) html += `<div class="rrow"><span>PROMOTED</span><b>${rankUps.map((r) => r.name).join(' > ')}</b></div>`;
     document.getElementById('resultBody').innerHTML = html;
     Z.ui.show('result');
+    // post-battle scenes
+    if (win && isM) {
+      const scene = [
+        { who: mission.def.client, text: mission.def.doneLine },
+        partner ? { who: partner.name, img: partner.id, text: partner.winLine || U.choice(partner.banter) } : null,
+      ];
+      if (restoredName) scene.push({ who: 'SPIRIT TOWN', text: restoredName + ' breathes again. Lanterns are going up on main street.' });
+      Z.cutscene.play(scene);
+    } else if (win && en.isChampion) {
+      Z.cutscene.play([
+        { who: en.name, evil: true, side: 'right', text: en.defeatLine },
+        { who: 'Ao', img: 'ao', text: 'Grand champion. The broom approves. The whole town approves.' },
+        { who: 'Ao', img: 'ao', text: 'Come by the shop. Tonight the Spirit Feast Bowl is free. Do not tell anyone.' },
+      ]);
+    }
   }
 
   // ---------- render ----------
@@ -412,6 +485,18 @@ Z.combat = (function () {
     // block wards (ofuda shield arc)
     [P, E].forEach((f) => { if (f && f.block) { ctx.strokeStyle = U.rgba(SPIRIT, 0.85); ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(f.x + f.facing * f.halfW, stage.groundY - f.y - f.spec.radius * 1.6, f.spec.radius * 1.5, -1.1, 1.1); ctx.stroke(); ctx.fillStyle = U.rgba(SPIRIT, 0.2); ctx.fill(); } });
 
+    // released soul rises from a broken puppet
+    if (soul) {
+      const age = t - soul.born, sy = stage.groundY - 90 - age * 60, sx = soul.x + Math.sin(age * 3) * 14;
+      if (age < 3.2) {
+        ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = Math.max(0, 1 - age / 3.2);
+        const g3 = ctx.createRadialGradient(sx, sy, 1, sx, sy, 26); g3.addColorStop(0, 'rgba(255,247,234,.95)'); g3.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g3; ctx.fillRect(sx - 26, sy - 26, 52, 52);
+        ctx.fillStyle = '#fff7ea'; ctx.beginPath(); ctx.arc(sx, sy, 7, 0, U.TAU);
+        ctx.quadraticCurveTo(sx - 10, sy + 16, sx - 3, sy + 22); ctx.fill();
+        ctx.restore();
+      }
+    }
     Z.fx.render(ctx);
     ctx.restore();
     Z.render.drawPetals(t);
@@ -487,7 +572,11 @@ Z.combat = (function () {
     const left = Math.max(0, Math.ceil(MATCH_TIME - matchT)); const el = document.getElementById('bTimer');
     if (el) { el.textContent = mission ? ('W' + (waveIdx + 1) + ' · ' + left) : left; el.classList.toggle('low', left <= 10 && phase === 'fight'); }
   }
-  function setBar(id, f) { const e = document.getElementById(id); if (e) e.style.width = U.clamp(f, 0, 1) * 100 + '%'; }
+  function setBar(id, f) {
+    const e = document.getElementById(id); if (!e) return;
+    e.style.width = U.clamp(f, 0, 1) * 100 + '%';
+    if (id === 'bhpL' || id === 'bhpR') e.parentElement.classList.toggle('lowhp', f > 0 && f < 0.28);
+  }
 
   return { start, update, render, get active() { return phase !== 'idle'; } };
 })();
