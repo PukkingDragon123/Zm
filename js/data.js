@@ -203,6 +203,7 @@ Z.data = (function () {
   // ---------------- overworld (spirit town main street) ----------------
   const STREET_LEN = 4600;
   const BUILDINGS = [
+    { id: 'camp',    x: 180,  w: 220, label: 'CAMPS',    screen: 'infil',     sign: 'KANE-CO CAMPS' },
     { id: 'house',   x: 520,  w: 300, label: 'DEN',      screen: 'workbench', sign: 'YOUR DEN' },
     { id: 'toyshop', x: 1180, w: 320, label: 'CURIO',    screen: 'shop',      sign: 'KITSUNE CURIOS' },
     { id: 'ramen',   x: 1860, w: 300, label: 'RAMEN',    screen: 'ramen',     sign: "AO'S RAMEN" },

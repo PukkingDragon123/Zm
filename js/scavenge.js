@@ -26,7 +26,7 @@ Z.scavenge = (function () {
       render(); return;
     }
     yard.greed++;
-    if (U.chance(0.42)) { const part = rollPart(g); yard.haul.parts.push(part.id); p.reveal = { type: 'part', rarity: part.rarity, name: part.name, sub: (D.RARITY[part.rarity] || {}).label }; Z.audio.sfx.found(part.rarity); if (D.rarityRank(part.rarity) >= 2) Z.fx.screenFlash(0.22, D.rarityColor(part.rarity)); }
+    if (U.chance(0.62)) { const part = rollPart(g); yard.haul.parts.push(part.id); p.reveal = { type: 'part', rarity: part.rarity, name: part.name, sub: (D.RARITY[part.rarity] || {}).label }; Z.audio.sfx.found(part.rarity); if (D.rarityRank(part.rarity) >= 2) Z.fx.screenFlash(0.22, D.rarityColor(part.rarity)); }
     else if (U.chance(0.6)) { const a = U.randInt(3, 8) + g * 2 + Z.state.rankTier; yard.haul.scrap += a; p.reveal = { type: 'scrap', name: '+' + a + ' SCRAP', sub: 'salvage' }; Z.audio.sfx.coin(); }
     else { const a = U.randInt(10, 30) + g * 4 + Z.state.rankTier * 3; yard.haul.credits += a; p.reveal = { type: 'credits', name: '+$' + a, sub: 'cash' }; Z.audio.sfx.coin(); }
     render();

@@ -499,6 +499,7 @@ Z.combat = (function () {
     }
     Z.fx.render(ctx);
     ctx.restore();
+    Z.render.drawForeground(t, 0);
     Z.render.drawPetals(t);
   }
 

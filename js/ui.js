@@ -7,7 +7,7 @@ Z.ui = (function () {
   let current = 'boot';
   let returnScreen = 'world';
   const enterHooks = {}, ACTIONS = {};
-  const SCREENS = ['boot', 'title', 'world', 'workbench', 'shop', 'ramen', 'quests', 'scavenge', 'ladder', 'battle', 'result', 'settings', 'how'];
+  const SCREENS = ['boot', 'title', 'world', 'workbench', 'shop', 'ramen', 'quests', 'scavenge', 'ladder', 'battle', 'result', 'settings', 'how', 'infil'];
   const screenEl = (n) => document.querySelector(`.screen[data-screen="${n}"]`);
 
   function show(name) {
@@ -28,6 +28,7 @@ Z.ui = (function () {
     ramen: ["AO'S RAMEN", 'eat first, fight after'], scavenge: ['JUNK GROVE', 'push your luck'],
     quests: ['REQUEST BOARD', 'help the town'], ladder: ['THE DOHYO', 'challenge matches'],
     crew: ['THE TEAHOUSE', 'your crew'],
+    infil: ['KANE-CO CAMPS', 'sneak in, take back parts'],
   };
   let lastTitle = null;
   function transition(name) {
@@ -47,7 +48,7 @@ Z.ui = (function () {
 
   function updateWallet() {
     const m = U.fmt(Z.state.credits);
-    ['worldMoney', 'shopMoney', 'ramenMoney', 'qMoney', 'ladMoney', 'crewMoney'].forEach((id) => { const e = document.getElementById(id); if (e) e.textContent = m; });
+    ['worldMoney', 'shopMoney', 'ramenMoney', 'qMoney', 'ladMoney', 'crewMoney', 'infilMoney'].forEach((id) => { const e = document.getElementById(id); if (e) e.textContent = m; });
   }
 
   function toast(msg, type) { const w = $('#toasts'); if (!w) return; const t = U.el('div', 'toast' + (type ? ' ' + type : ''), msg); w.appendChild(t); setTimeout(() => t.remove(), 2600); }
@@ -87,6 +88,7 @@ Z.ui = (function () {
       ['REQUESTS', 'KANE-CO robots are squatting all over town. Take requests with a crew partner, clear the waves, and restore each district.'],
       ['YOUR CREW', 'Visit the teahouse to talk with Tengu, Kappa and Oni. Friendship ranks make their battle support stronger.'],
       ['EAT WELL', 'Ao\'s snacks buff your next fight. Junk Grove digs pay in free parts — mind the hazards.'],
+      ['KANE-CO CAMPS', 'Sneak-in parkour: jump with W, change form with K. ROCK smashes and hides, PAPER glides and rides vents, SCISSORS dashes through fences (J).'],
     ];
     const g = $('#howGrid'); if (!g) return; U.clear(g);
     items.forEach(([t, d]) => { const it = U.el('div', 'how-item'); it.innerHTML = `<h3>${t}</h3><p>${d}</p>`; g.appendChild(it); });

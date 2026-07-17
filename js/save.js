@@ -36,6 +36,7 @@ Z.save = (function () {
         friend: state.friend,
         missionsDone: state.missionsDone,
         restored: state.restored,
+        campsDone: state.campsDone,
       };
       localStorage.setItem(KEY, JSON.stringify(snapshot));
       return true;

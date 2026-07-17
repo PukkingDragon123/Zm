@@ -98,7 +98,8 @@ body.no-crt #grain{display:none;}
 /* ---------- WORLD hud ---------- */
 [data-screen=world]{pointer-events:none;}
 [data-screen=world] *{pointer-events:auto;}
-.world-hud{display:flex; justify-content:space-between; align-items:flex-start; padding:14px 16px;}
+.world-hud{display:flex; justify-content:flex-end; align-items:flex-start; padding:14px 16px;}
+.world-hud .money{display:none;}
 .money{font-size:17px; color:var(--verm);}
 .money::before{content:'¥ ';}
 .interact{position:absolute; left:50%; bottom:25%; transform:translateX(-50%); font-family:var(--disp);
@@ -110,6 +111,11 @@ body.no-crt #grain{display:none;}
 /* ---------- interiors ---------- */
 .interior{position:absolute; inset:0; display:flex; flex-direction:column;}
 .interior::before{content:''; position:absolute; inset:0; background:rgba(30,20,10,.34); pointer-events:none;}
+.interior.seethru{pointer-events:none;}
+.interior.seethru>*{pointer-events:auto;}
+.interior.seethru::before{background:none;}
+.ramen-hidden{opacity:0; pointer-events:none!important; transform:translateY(18px); transition:opacity .35s, transform .35s cubic-bezier(.34,1.56,.64,1);}
+.ramen-hidden.on{opacity:1; pointer-events:auto!important; transform:none;}
 .interior>*{position:relative;}
 .ramen-bg{background:url('../assets/ramen/interior.jpg') center/cover;}
 .shop-bg{background:url('../assets/world/izakaya.jpg') center/cover;}
@@ -155,7 +161,7 @@ body.no-crt #grain{display:none;}
 .b-epic{border-color:#8f63b8!important;} .b-rare{border-color:#4a7fa8!important;}
 
 /* ramen menu */
-.ramen-list{flex:1; overflow:auto; padding:12px 16px; display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; align-content:start; max-width:70%;}
+.ramen-list{flex:1; overflow:auto; padding:12px 16px; display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; align-content:start; max-width:64%;}
 .dish{background:var(--paper); border:3px solid var(--ink); border-radius:14px 18px 12px 16px; padding:14px; box-shadow:3px 4px 0 rgba(35,22,10,.45);}
 .dish:nth-child(odd){transform:rotate(.6deg);} .dish:nth-child(even){transform:rotate(-.6deg);}
 .dish .d-head{display:flex; align-items:center; gap:10px; margin-bottom:6px;}

@@ -15,6 +15,7 @@ Z.state = (function () {
     scavengeCost: 40,
     buff: null,           // { hpMul, powMul, name } — consumed on next fight
     friend: {},           // crewId -> { xp, talked }
+    campsDone: {},        // campId -> true
     missionsDone: {},     // missionId -> true
     restored: {},         // districtId -> true
     stats: {
@@ -32,7 +33,7 @@ Z.state = (function () {
     s.build = JSON.parse(JSON.stringify(st.build));
     s.botName = st.botName;
     s.beaten = {}; s.claimedQuests = {}; s.tutorialSeen = false; s.scavengeCost = 40; s.buff = null;
-    s.friend = {}; s.missionsDone = {}; s.restored = {};
+    s.friend = {}; s.missionsDone = {}; s.restored = {}; s.campsDone = {};
     s.stats = { wins: 0, losses: 0, ringOuts: 0, koFinishes: 0, noDamageWins: 0, rareFinds: 0, currentStreak: 0, bestStreak: 0, earnedTotal: 0, winsByWeapon: {}, matches: 0 };
   }
 
@@ -54,6 +55,7 @@ Z.state = (function () {
       s.friend = saved.friend || {};
       s.missionsDone = saved.missionsDone || {};
       s.restored = saved.restored || {};
+      s.campsDone = saved.campsDone || {};
       if (saved.stats) Object.assign(s.stats, saved.stats);
       migrateBuild();
     } else {
@@ -182,6 +184,7 @@ Z.state = (function () {
     get friend() { return s.friend; },
     get missionsDone() { return s.missionsDone; },
     get restored() { return s.restored; },
+    get campsDone() { return s.campsDone; },
     friendOf(id) { if (!s.friend[id]) s.friend[id] = { xp: 0, talked: 0 }; return s.friend[id]; },
     friendRank(id) { const f = s.friend[id]; return Math.min(5, 1 + Math.floor(((f && f.xp) || 0) / 30)); },
     addFriendXp(id, n) {

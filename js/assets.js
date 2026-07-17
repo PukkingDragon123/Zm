@@ -3,6 +3,9 @@
    ================================================================ */
 Z.assets = (function () {
   const MANIFEST = {
+    // optional animation sheets (4 cols x 2 rows) — drop them in and they're used automatically
+    'sheet.tanuki': 'assets/char/tanuki_sheet.png',
+    'sheet.kappa':  'assets/char/kappa_sheet.png',
     'char.tanuki':  'assets/char/tanuki.png',
     'char.tengu':   'assets/char/tengu.png',
     'char.kappa':   'assets/char/kappa.png',

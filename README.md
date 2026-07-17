@@ -28,7 +28,19 @@ Self-contained web game — **vanilla JS + HTML5 Canvas, no build step.** Open
   Higher friendship = stronger battle support (sharper attacks, mid-mission
   repairs, iron armor).
 - **Ao's ramen** — the blue broom yokai serves snacks that buff your next fight.
-- **Junk grove** — push-your-luck digging for free parts.
+- **Junk grove** — push-your-luck digging: now the main way to find parts.
+- **KANE-CO camps** — sneak-in parkour platformer levels (coyote time, jump
+  buffering, guards with vision cones). Cycle the tanuki's HENGE forms:
+  ROCK smashes crates and hides from guards, PAPER glides and rides vents,
+  SCISSORS dash-cuts fences. Clear camps for parts and scrap.
+
+## Optional animation sheets
+
+Drop 4x2 sprite sheets at `assets/char/tanuki_sheet.png` (top row: 4 walk
+frames · bottom row: jump, idle, happy, idle-blink) and
+`assets/char/kappa_sheet.png` (top row: idle poses · bottom row: action poses)
+and the game uses the frames automatically — walk cycles on the street, poses
+in scenes. Without them it falls back to the single cut-out images.
 
 ## Credits & art
 

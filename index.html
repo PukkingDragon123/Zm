@@ -75,13 +75,12 @@
     </div>
   </section>
 
-  <!-- RAMEN -->
+  <!-- RAMEN (canvas scene: walk in, sit, order) -->
   <section class="screen" data-screen="ramen">
-    <div class="interior ramen-bg">
+    <div class="interior seethru">
       <div class="int-head"><button class="pbtn tiny" data-act="world">LEAVE</button><h2>AO'S RAMEN</h2><div class="int-money" id="ramenMoney">0</div></div>
-      <div class="ramen-stage"><img id="aoSprite" src="assets/char/aoyokai.png" alt="" draggable="false" /></div>
-      <div class="int-npc paper" id="ramenNpc"></div>
-      <div class="ramen-list" id="ramenList"></div>
+      <div class="int-npc paper ramen-hidden" id="ramenNpc"></div>
+      <div class="ramen-list ramen-hidden" id="ramenList"></div>
     </div>
   </section>
 
@@ -123,6 +122,15 @@
     <div class="interior">
       <div class="int-head"><button class="pbtn tiny" data-act="world">LEAVE</button><h2>THE DOHYO — CHALLENGE</h2><div class="int-money" id="ladMoney">0</div></div>
       <div class="ladder" id="ladderList"></div>
+    </div>
+  </section>
+
+  <!-- KANE-CO CAMPS (sneak-in platformer) -->
+  <section class="screen" data-screen="infil">
+    <div class="interior seethru">
+      <div class="int-head"><button class="pbtn tiny" data-act="worldFromInfil">LEAVE</button><h2>KANE-CO CAMPS</h2><div class="int-money" id="infilMoney">0</div></div>
+      <div class="quests" id="infilList"></div>
+      <div id="infilHud" style="display:none"></div>
     </div>
   </section>
 
@@ -199,6 +207,7 @@
 <script src="js/cutscene.js"></script>
 <script src="js/quests.js"></script>
 <script src="js/ladder.js"></script>
+<script src="js/infil.js"></script>
 <script src="js/overworld.js"></script>
 <script src="js/combat.js"></script>
 <script src="js/game.js"></script>

@@ -177,8 +177,17 @@ Z.workbench = (function () {
     // tray chips
     for (const c of tray) chip(ctx, c, false);
 
-    // dragged part on top
-    if (drag) { chip(ctx, { item: drag.item, x: drag.x - 58, y: drag.y - 20, w: 116, h: 40, avail: 0 }, true); }
+    // dragged part on top — tilts with motion, floats on a lifted shadow
+    if (drag) {
+      const tilt = Math.max(-0.3, Math.min(0.3, drag.vx * 0.0022));
+      ctx.save();
+      ctx.globalAlpha = 0.3; ctx.fillStyle = '#20140a';
+      ctx.beginPath(); ctx.ellipse(drag.x, drag.y + 34, 52, 9, 0, 0, U.TAU); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.translate(drag.x, drag.y); ctx.rotate(tilt); ctx.translate(-drag.x, -drag.y);
+      chip(ctx, { item: drag.item, x: drag.x - 58, y: drag.y - 24, w: 116, h: 40, avail: 0 }, true);
+      ctx.restore();
+    }
 
     // transmutation flourish on bolt-in (FMA alchemy circle)
     if (bolt) {

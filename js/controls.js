@@ -18,7 +18,7 @@ Z.controls = (function () {
       case 'KeyA': case 'ArrowLeft': held.left = down; break;
       case 'KeyD': case 'ArrowRight': held.right = down; break;
       case 'KeyW': case 'ArrowUp': held.up = down; if (down && !e.repeat) { interactQ = true; jumpQ = true; } break;
-      case 'Space': if (down && !e.repeat) { interactQ = true; jumpQ = true; } break;
+      case 'Space': held.up = down; if (down && !e.repeat) { interactQ = true; jumpQ = true; } break;
       case 'KeyJ': held.attack = down; if (down && !e.repeat) attackQ = true; break;
       case 'KeyK': held.skill = down; if (down && !e.repeat) skillQ = true; break;
       case 'KeyL': case 'ShiftLeft': case 'ShiftRight': held.block = down; break;
@@ -64,6 +64,10 @@ Z.controls = (function () {
       padButton('JMP', 'jmp', { edge: 'jump' }),
       padButton('SKL', 'skill', { edge: 'skill' }),
       padButton('HIT', 'atk big', { edge: 'attack' }),
+    ]);
+    else if (m === 'infil') setRight([
+      padButton('FORM', 'skill', { edge: 'skill' }),
+      padButton('JMP', 'jmp big', { hold: 'up', edge: 'jump' }),
     ]);
   }
 

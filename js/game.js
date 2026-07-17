@@ -32,6 +32,8 @@ Z.game = (function () {
     const cur = Z.ui.current;
     if (cur === 'battle' && Z.combat.active && !(Z.cutscene && Z.cutscene.active)) Z.combat.update(dt);
     if (cur === 'world') Z.overworld.frame(dt, clock);
+    else if (cur === 'ramen') Z.ramen.frame(dt, clock);
+    else if (cur === 'infil') Z.infil.frame(dt, clock);
     else if (cur === 'battle' && Z.combat.active) Z.combat.render();
     else { Z.render.clear(); Z.render.ambient(clock); }
     if (cur === 'workbench') Z.workbench.draw(clock);
@@ -45,7 +47,7 @@ Z.game = (function () {
     Z.audio.init();
     Z.controls.init();
     Z.ui.init();
-    Z.workbench.init(); Z.scavenge.init(); Z.shop.init(); Z.ramen.init(); Z.crew.init(); Z.quests.init(); Z.ladder.init(); Z.overworld.init();
+    Z.workbench.init(); Z.scavenge.init(); Z.shop.init(); Z.ramen.init(); Z.crew.init(); Z.quests.init(); Z.ladder.init(); Z.infil.init(); Z.overworld.init();
 
     Z.ui.registerAction('play', () => {
       Z.audio.resume(); Z.ui.show('world');
@@ -61,6 +63,7 @@ Z.game = (function () {
         ]);
       }
     });
+    Z.ui.registerAction('worldFromInfil', () => { Z.infil.leave(); Z.ui.show('world'); });
     Z.ui.registerAction('reset', () => { if (confirm('Start a brand new journey? Your current save will be swept away.')) { Z.state.reset(); Z.ui.toast('Save wiped.', 'warn'); } });
     document.addEventListener('pointerdown', () => Z.audio.resume(), { once: true });
 

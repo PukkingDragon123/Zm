@@ -73,6 +73,39 @@ Z.render = (function () {
     drawPetals(t);
   }
 
+  // ---------- cardboard-theater framing: drifting cutout clouds + foreground grass ----------
+  let clouds = null;
+  function drawTheater(t, camX) {
+    if (!clouds) { clouds = []; for (let i = 0; i < 5; i++) clouds.push({ x: U.rand(0, 1), y: U.rand(0.04, 0.2), s: U.rand(0.6, 1.3), sp: U.rand(4, 11) }); }
+    const camo = (camX || 0) * 0.06;
+    for (const cl of clouds) {
+      cl._px = ((cl.x * (W + 400) + t * cl.sp - camo) % (W + 400)) - 200;
+      const cy = cl.y * H, s = cl.s * 46;
+      paperFill(ctx, () => {
+        ctx.beginPath();
+        ctx.arc(cl._px, cy, s * 0.62, 0, U.TAU);
+        ctx.arc(cl._px + s * 0.7, cy + s * 0.12, s * 0.48, 0, U.TAU);
+        ctx.arc(cl._px - s * 0.7, cy + s * 0.16, s * 0.42, 0, U.TAU);
+        ctx.arc(cl._px + s * 0.2, cy - s * 0.3, s * 0.4, 0, U.TAU);
+      }, '#faf3e3', { cut: 4, ink: 2 });
+    }
+  }
+  function drawForeground(t, camX) {
+    // scalloped cut-paper bushes hugging the bottom edge (stage apron)
+    const gy = H + 8, step = 90, off = -((camX || 0) * 1.15 % step);
+    ctx.save();
+    ctx.fillStyle = '#3d4d33';
+    ctx.beginPath(); ctx.moveTo(-40, gy);
+    for (let x = off - step; x < W + step; x += step) {
+      const wob = Math.sin(t * 0.9 + x * 0.05) * 3;
+      ctx.quadraticCurveTo(x + step / 2, gy - 46 - wob, x + step, gy - 12);
+    }
+    ctx.lineTo(W + 40, gy); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#f5ecd7'; ctx.lineWidth = 4; ctx.stroke();
+    ctx.strokeStyle = '#2f2418'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.restore();
+  }
+
   // ---------- chunky outlined text ----------
   function pxText(c, text, x, y, size, color, align) {
     c.save(); c.font = `${size + 4}px "Mochiy Pop One", sans-serif`;
@@ -127,8 +160,45 @@ Z.render = (function () {
     return cv;
   }
 
+  // ---------- spritesheet animation (4x2 grids from uploaded art) ----------
+  // frame names -> [col,row]. Row 0 = walk cycle, row 1 = poses.
+  const SHEETS = {
+    'char.tanuki': { key: 'sheet.tanuki', cols: 4, rows: 2, anims: { walk: [[0, 0], [1, 0], [2, 0], [3, 0]], idle: [[1, 1], [3, 1]], jump: [[0, 1]], happy: [[2, 1]], talk: [[2, 1], [1, 1]] } },
+    'char.kappa': { key: 'sheet.kappa', cols: 4, rows: 2, anims: { walk: [[0, 1], [1, 1]], idle: [[0, 0], [1, 0]], jump: [[3, 1]], happy: [[3, 1]], talk: [[2, 0], [3, 0], [2, 1]] } },
+  };
+  const frameCache = new Map();
+  // returns a cutout canvas for one sheet frame (cream+ink border), or null
+  function getSheetFrame(spriteKey, anim, fi, w) {
+    const def = SHEETS[spriteKey]; if (!def) return null;
+    const im = Z.assets.img(def.key); if (!im) return null;
+    const frames = def.anims[anim] || def.anims.idle; if (!frames || !frames.length) return null;
+    const [col, row] = frames[fi % frames.length];
+    const ck = spriteKey + '|' + anim + '|' + (fi % frames.length) + '|' + (w | 0);
+    let cv = frameCache.get(ck); if (cv) return cv;
+    const fw = im.naturalWidth / def.cols, fh = im.naturalHeight / def.rows;
+    // slice the frame, then trim: build source canvas
+    const src = document.createElement('canvas'); src.width = fw; src.height = fh;
+    src.getContext('2d').drawImage(im, col * fw, row * fh, fw, fh, 0, 0, fw, fh);
+    const h = w * (fh / fw), border = Math.max(3, w * 0.05), pad = border + 4;
+    cv = document.createElement('canvas'); cv.width = Math.ceil(w + pad * 2); cv.height = Math.ceil(h + pad * 2);
+    const c = cv.getContext('2d');
+    const stamp = (r, target) => { for (let i = 0; i < 16; i++) { const a = i / 16 * U.TAU; target.drawImage(src, pad + Math.cos(a) * r, pad + Math.sin(a) * r, w, h); } };
+    stamp(border, c);
+    c.globalCompositeOperation = 'source-in'; c.fillStyle = 'rgba(47,36,24,.9)'; c.fillRect(0, 0, cv.width, cv.height);
+    c.globalCompositeOperation = 'source-over';
+    const cv2 = document.createElement('canvas'); cv2.width = cv.width; cv2.height = cv.height;
+    const c2 = cv2.getContext('2d'); stamp(border - 1.8, c2);
+    c2.globalCompositeOperation = 'source-in'; c2.fillStyle = '#f5ecd7'; c2.fillRect(0, 0, cv2.width, cv2.height);
+    c.drawImage(cv2, 0, 0);
+    c.drawImage(src, pad, pad, w, h);
+    cv._pad = pad; cv._w = w; cv._h = h;
+    frameCache.set(ck, cv);
+    return cv;
+  }
+
   // ---------- bouncy image sprite (paper-mario feel) ----------
-  // opts: {w, h, facing, bob (0-1), squash, turn (0..1 flip), shadow, sway}
+  // opts: {w, h, facing, bob (0-1), squash, turn (0..1 flip), shadow, sway,
+  //        anim ('walk'|'idle'|'jump'|'happy'|'talk'), animT (seconds)}
   function drawSprite(key, x, groundY, opts) {
     opts = opts || {};
     const im = Z.assets.img(key); if (!im) return false;
@@ -147,9 +217,19 @@ Z.render = (function () {
     ctx.translate(x, groundY - bob);
     ctx.rotate(opts.sway || 0);
     ctx.scale(flip * sxv, sy);
-    const cut = getCutout(key, w);
-    if (cut) ctx.drawImage(cut, -w / 2 - cut._pad, -h - cut._pad);
-    else ctx.drawImage(im, -w / 2, -h, w, h);
+    // animation frames from the uploaded sheet, when present
+    let drawn = false;
+    if (opts.anim) {
+      const fps = opts.anim === 'walk' ? 9 : 3;
+      const fi = Math.floor((opts.animT || 0) * fps);
+      const fr = getSheetFrame(key, opts.anim, fi, w);
+      if (fr) { ctx.drawImage(fr, -w / 2 - fr._pad, -fr._h - fr._pad); drawn = true; }
+    }
+    if (!drawn) {
+      const cut = getCutout(key, w);
+      if (cut) ctx.drawImage(cut, -w / 2 - cut._pad, -h - cut._pad);
+      else ctx.drawImage(im, -w / 2, -h, w, h);
+    }
     ctx.restore();
     return true;
   }
@@ -185,8 +265,8 @@ Z.render = (function () {
     const breathe = 1 + Math.sin(t * 2.8) * 0.02 + (moving ? Math.abs(Math.sin(walk * 3)) * 0.06 : 0);
     const lean = (anim.attackT > 0 ? 0.16 : 0) + (moving ? 0.06 : 0);
 
-    // proportions
-    const legH = 26 * s, torsoW = 34 * s, torsoH = 34 * s, headW = 24 * s, headH = 20 * s;
+    // proportions (chibi/anime: big head, compact body)
+    const legH = 24 * s, torsoW = 33 * s, torsoH = 30 * s, headW = 31 * s, headH = 26 * s;
     const hipY = groundY - legH - hop;
     const chestY = hipY - torsoH * breathe;
 
@@ -234,11 +314,19 @@ Z.render = (function () {
     const headBob = Math.sin(t * 2.8 + 0.6) * 1.6 * s + (moving ? Math.abs(Math.sin(walk * 3 + 0.5)) * 2.2 * s : 0);
     const hy = chestY - headH - 3 * s - headBob;
     P(() => roundRect(ctx, -headW * 0.42, hy, headW, headH, 6 * s), v.corp ? wood : '#c39a6b');
-    // eye visor / rune eye
-    if (v.corp) { P(() => roundRect(ctx, headW * 0.02, hy + headH * 0.28, headW * 0.34, 5.4 * s, 2.6 * s), accent, { cut: 2.5, noShadow: true }); }
-    else {
-      ctx.fillStyle = '#2f2418'; ctx.beginPath(); ctx.arc(headW * 0.16, hy + headH * 0.42, 2.8 * s, 0, U.TAU); ctx.fill();
-      ctx.strokeStyle = '#2f2418'; ctx.lineWidth = 1.6 * s; ctx.beginPath(); ctx.arc(headW * 0.16, hy + headH * 0.6, 3.4 * s, 0.15, Math.PI - 0.4); ctx.stroke(); // little smile
+    // face: corp = cold visor · yokai puppet = big anime eye + blush + smile
+    if (v.corp) {
+      P(() => roundRect(ctx, headW * 0.02, hy + headH * 0.3, headW * 0.36, 5.8 * s, 2.8 * s), accent, { cut: 2.5, noShadow: true });
+      ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.7; ctx.fillRect(headW * 0.06, hy + headH * 0.33, headW * 0.08, 2 * s); ctx.globalAlpha = 1;
+    } else {
+      const ex = headW * 0.18, ey = hy + headH * 0.42;
+      ctx.fillStyle = '#fff8ea'; ctx.beginPath(); ctx.ellipse(ex, ey, 4.6 * s, 5.4 * s, 0, 0, U.TAU); ctx.fill();
+      ctx.strokeStyle = '#2f2418'; ctx.lineWidth = 1.4 * s; ctx.stroke();
+      ctx.fillStyle = '#2f2418'; ctx.beginPath(); ctx.ellipse(ex + 1.2 * s, ey + 0.4 * s, 2.6 * s, 3.2 * s, 0, 0, U.TAU); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ex + 2.2 * s, ey - 1.2 * s, 1.1 * s, 0, U.TAU); ctx.fill();   // eye shine
+      ctx.fillStyle = 'rgba(230,110,90,.5)'; ctx.beginPath(); ctx.ellipse(ex - 5.5 * s, ey + 4.6 * s, 2.6 * s, 1.5 * s, 0, 0, U.TAU); ctx.fill(); // blush
+      ctx.strokeStyle = '#2f2418'; ctx.lineWidth = 1.7 * s; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(headW * 0.1, hy + headH * 0.68, 3.2 * s, 0.2, Math.PI - 0.5); ctx.stroke(); // smile
     }
     // paper shide zigzag tassel on head
     ctx.save(); ctx.translate(-headW * 0.3, hy - 1 * s); ctx.rotate(Math.sin(t * 3) * 0.18 - 0.2);
@@ -469,6 +557,7 @@ Z.render = (function () {
   return {
     init, resize, setFrameDt, setRain, clear, ambient, drawPetals, setScene,
     pxText, roundRect, paperFill, drawSprite, drawBotSide, drawBotPreview, drawPartIcon, drawFoodIcon, getVisual,
+    drawTheater, drawForeground,
     get ctx() { return ctx; }, get W() { return W; }, get H() { return H; },
   };
 })();

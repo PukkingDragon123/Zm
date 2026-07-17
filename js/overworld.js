@@ -45,14 +45,16 @@ Z.overworld = (function () {
     gg.addColorStop(0, 'rgba(40,22,10,0)'); gg.addColorStop(1, 'rgba(40,22,10,.5)');
     ctx.fillStyle = gg; ctx.fillRect(0, groundY - 26, W, H - groundY + 26);
 
+    // cutout clouds drifting above the painted street
+    Z.render.drawTheater(t, camX);
     // torii gate near the dohyo (paper cutout)
     drawTorii(ctx, 4060 - camX * 1, groundY, 1.15, t);
 
-    // paper shop-stand props for each doorway
+    // doorway markers — the buildings ARE the backdrop; we just mark the doors
     for (const b of D.BUILDINGS) {
-      const sx = b.x - camX;
-      if (sx + b.w < -80 || sx > W + 80) continue;
-      drawStand(ctx, b, sx, groundY, t, near === b);
+      const sx = b.x + b.w / 2 - camX;
+      if (sx < -80 || sx > W + 80) continue;
+      drawDoorMarker(ctx, b, sx, groundY, t, near === b);
     }
 
     // restored district decorations — lantern strings glow where you've driven KANE-CO out
@@ -66,20 +68,22 @@ Z.overworld = (function () {
     D.NPCS.forEach((n, i) => {
       const sx = n.x - camX; if (sx < -70 || sx > W + 70) return;
       const bob = Math.abs(Math.sin(t * 2.2 + i * 1.7)) * 6;
-      Z.render.drawSprite(NPC_SPRITES[i % 3], sx, groundY, { w: 82, bob, squash: Math.sin(t * 4.4 + i) * 0.03, sway: Math.sin(t * 1.8 + i) * 0.04, facing: kid.x < n.x ? -1 : 1 });
+      Z.render.drawSprite(NPC_SPRITES[i % 3], sx, groundY, { w: 82, bob, squash: Math.sin(t * 4.4 + i) * 0.03, sway: Math.sin(t * 1.8 + i) * 0.04, facing: kid.x < n.x ? -1 : 1, anim: 'idle', animT: t + i });
       if (Math.abs(kid.x - n.x) < 130 && n.line) bubble(ctx, sx, groundY - 122, n.line);
     });
 
     // the tanuki — hop-walk with squash & stretch + paper turn-flip
     const kx = kid.x - camX;
     const moving = Math.abs(kid.vx) > 1;
-    const hop = moving ? Math.abs(Math.sin(kid.walk * 9)) * 12 : Math.sin(t * 2.2) * 2.5;
-    const squash = moving ? Math.cos(kid.walk * 18) * 0.06 : Math.sin(t * 2.2) * 0.025;
-    if (!Z.render.drawSprite('char.tanuki', kx, groundY, { w: 112, bob: hop, squash, facing: kid.facing, turn: kid.turn, sway: moving ? Math.sin(kid.walk * 9) * 0.05 : 0 })) {
+    const hasSheet = Z.assets.ready('sheet.tanuki');
+    const hop = moving ? Math.abs(Math.sin(kid.walk * 9)) * (hasSheet ? 5 : 12) : Math.sin(t * 2.2) * 2.5;
+    const squash = moving ? Math.cos(kid.walk * 18) * (hasSheet ? 0.03 : 0.06) : Math.sin(t * 2.2) * 0.025;
+    if (!Z.render.drawSprite('char.tanuki', kx, groundY, { w: 112, bob: hop, squash, facing: kid.facing, turn: kid.turn, sway: moving ? Math.sin(kid.walk * 9) * 0.05 : 0, anim: moving ? 'walk' : 'idle', animT: moving ? kid.walk : t })) {
       ctx.fillStyle = '#7a5a3a'; ctx.fillRect(kx - 18, groundY - 60, 36, 60);
     }
     if (moving && Math.random() < 0.2) Z.fx.dust(kx - kid.facing * 16, groundY, 1, '#c9a76b');
 
+    Z.render.drawForeground(t, camX);
     Z.render.drawPetals(t);
   }
 
@@ -98,27 +102,30 @@ Z.overworld = (function () {
     }
   }
 
-  function drawStand(ctx, b, sx, groundY, t, hot) {
+  function drawDoorMarker(ctx, b, sx, groundY, t, hot) {
     const P = (p, f, o) => Z.render.paperFill(ctx, p, f, o);
-    const w = Math.min(b.w, 290), h = 168, x = sx + (b.w - w) / 2, y = groundY - h;
-    const wob = Math.sin(t * 1.4 + b.x) * 0.008;
-    ctx.save(); ctx.translate(x + w / 2, groundY); ctx.rotate(wob); ctx.translate(-(x + w / 2), -groundY);
-    // stall body + noren curtain roof
-    P(() => Z.render.roundRect(ctx, x, y + 34, w, h - 34, 10), '#e8d9b5');
-    P(() => { ctx.beginPath(); ctx.moveTo(x - 12, y + 40); ctx.lineTo(x + w / 2, y - 4); ctx.lineTo(x + w + 12, y + 40); ctx.closePath(); }, hot ? '#d94f30' : '#b8563c');
-    // noren strips
-    for (let i = 0; i < 4; i++) { const nx = x + 10 + i * (w - 20) / 3.2, swy = Math.sin(t * 2 + i) * 2.4; ctx.fillStyle = '#f5ecd7'; ctx.fillRect(nx, y + 40, 12, 22 + swy); ctx.strokeStyle = '#2f2418'; ctx.lineWidth = 1.6; ctx.strokeRect(nx, y + 40, 12, 22 + swy); }
-    // doorway
-    P(() => Z.render.roundRect(ctx, x + w / 2 - 26, groundY - 72, 52, 72, 7), '#4a3826', { noShadow: true, cut: 3 });
-    // paper lantern bobbing by the door
-    const lb = Math.sin(t * 2.2 + b.x) * 3;
-    P(() => { ctx.beginPath(); ctx.ellipse(x + w - 18, groundY - 72 + lb, 11, 14, 0, 0, U.TAU); }, hot ? '#ffb35c' : '#e8a33d', { noShadow: true, cut: 3 });
+    const bob = Math.sin(t * 2.6 + b.x) * 5;
+    // welcome mat
+    ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = '#20140a';
+    ctx.beginPath(); ctx.ellipse(sx, groundY + 4, 52, 9, 0, 0, U.TAU); ctx.fill(); ctx.restore();
+    P(() => { ctx.beginPath(); ctx.ellipse(sx, groundY, 46, 8, 0, 0, U.TAU); }, hot ? '#d94f30' : '#8a6a45', { noShadow: true, cut: 3.4 });
+    // glowing paper lantern floating over the door
+    const ly = groundY - 148 + bob;
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    const lg = ctx.createRadialGradient(x + w - 18, groundY - 72 + lb, 2, x + w - 18, groundY - 72 + lb, 40);
-    lg.addColorStop(0, 'rgba(255,190,110,.5)'); lg.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = lg; ctx.fillRect(x + w - 58, groundY - 112, 80, 80); ctx.restore();
-    Z.render.pxText(ctx, b.sign, x + w / 2, y + 26, hot ? 15 : 12, hot ? '#ffe9bf' : '#f5ecd7', 'center');
-    ctx.restore();
+    const lg = ctx.createRadialGradient(sx, ly, 2, sx, ly, hot ? 66 : 44);
+    lg.addColorStop(0, hot ? 'rgba(255,190,110,.6)' : 'rgba(255,190,110,.32)'); lg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = lg; ctx.fillRect(sx - 70, ly - 70, 140, 140); ctx.restore();
+    P(() => { ctx.beginPath(); ctx.ellipse(sx, ly, 13, 17, 0, 0, U.TAU); }, hot ? '#ffb35c' : '#e8a33d', { noShadow: true, cut: 3 });
+    ctx.strokeStyle = '#2f2418'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(sx - 7, ly - 6); ctx.lineTo(sx + 7, ly - 6); ctx.moveTo(sx - 8, ly + 1); ctx.lineTo(sx + 8, ly + 1); ctx.stroke();
+    // bobbing arrow when near
+    if (hot) {
+      const ay = ly - 34 + Math.sin(t * 5) * 5;
+      P(() => { ctx.beginPath(); ctx.moveTo(sx - 11, ay - 16); ctx.lineTo(sx + 11, ay - 16); ctx.lineTo(sx + 11, ay - 4); ctx.lineTo(sx, ay + 8); ctx.lineTo(sx - 11, ay - 4); ctx.closePath(); }, '#d94f30', { noShadow: true, cut: 3.4 });
+      Z.render.pxText(ctx, b.sign, sx, ay - 26, 13, '#ffe9bf', 'center');
+    } else {
+      Z.render.pxText(ctx, b.label, sx, ly - 26, 9, 'rgba(255,233,191,.75)', 'center');
+    }
   }
 
   function drawLanternString(ctx, x, y, t) {
