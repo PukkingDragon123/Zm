@@ -7,16 +7,16 @@ Z.game = (function () {
 
   function awardRp(n) {
     const reached = Z.state.addRp(n);
-    reached.forEach((rk) => { Z.state.addCredits(rk.reward); Z.audio.sfx.rank(); Z.fx.screenFlash(0.25, D.PAL.amber); Z.ui.toast('RANK UP — ' + rk.name + ' (+$' + U.fmt(rk.reward) + ')', 'gold'); });
+    reached.forEach((rk) => { Z.state.addCredits(rk.reward); Z.audio.sfx.rank(); Z.fx.screenFlash(0.25, D.PAL.amber); Z.ui.toast('RANK UP — ' + rk.name + ' (+' + U.fmt(rk.reward) + ')', 'gold'); });
     Z.ui.updateWallet();
     return reached;
   }
-  function onChampionDefeated() { Z.ui.toast('YOU ARE KING OF THE BLOCK', 'gold'); }
+  function onChampionDefeated() { Z.ui.toast('GRAND CHAMPION OF THE DOHYO', 'gold'); }
 
-  const BOOT = ['booting block-7 grid ......... ok', 'spooling scrap index ......... ok', 'lighting the strip ........... ok', 'the pit is open. good luck, kid.'];
+  const BOOT = (D.BOOT_LINES && D.BOOT_LINES.length) ? D.BOOT_LINES : ['waking the shrine spirits ... ok', 'stringing the puppets ....... ok', 'lighting the lanterns ....... ok', 'spirit town is open. welcome home.'];
   function boot() {
     const bar = $('.boot-bar i'), log = $('#bootLog'); let i = 0, p = 0;
-    $('#titleSub') && ($('#titleSub').textContent = D.style.worldLore);
+    $('#titleSub') && ($('#titleSub').textContent = D.LORE || D.style.worldLore);
     const iv = setInterval(() => {
       p = Math.min(100, p + U.rand(14, 28)); if (bar) bar.style.width = p + '%';
       if (i < BOOT.length && p > (i + 1) * 20) { log.textContent += (log.textContent ? '\n' : '') + '> ' + BOOT[i]; i++; }
@@ -45,10 +45,10 @@ Z.game = (function () {
     Z.audio.init();
     Z.controls.init();
     Z.ui.init();
-    Z.workbench.init(); Z.scavenge.init(); Z.shop.init(); Z.ramen.init(); Z.quests.init(); Z.ladder.init(); Z.overworld.init();
+    Z.workbench.init(); Z.scavenge.init(); Z.shop.init(); Z.ramen.init(); Z.crew.init(); Z.quests.init(); Z.ladder.init(); Z.overworld.init();
 
     Z.ui.registerAction('play', () => { Z.audio.resume(); Z.ui.show('world'); });
-    Z.ui.registerAction('reset', () => { if (confirm('Wipe your save and start over from the gutter?')) { Z.state.reset(); Z.ui.toast('Save wiped.', 'warn'); } });
+    Z.ui.registerAction('reset', () => { if (confirm('Start a brand new journey? Your current save will be swept away.')) { Z.state.reset(); Z.ui.toast('Save wiped.', 'warn'); } });
     document.addEventListener('pointerdown', () => Z.audio.resume(), { once: true });
 
     boot();

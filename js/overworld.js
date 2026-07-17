@@ -1,168 +1,150 @@
 /* ================================================================
-   overworld.js — the strip. Side-scrolling street you walk with a
-   kid character; stop at a building and enter it.
+   overworld.js — Spirit Town main street. Paper-cutout characters
+   bouncing over the painted street backdrop. Walk with A/D, enter
+   with W. Restored districts light up with lanterns.
    ================================================================ */
 Z.overworld = (function () {
   const U = Z.util, D = Z.data, PAL = Z.data.PAL;
   const LEN = D.STREET_LEN;
-  const SPEED = 240;
-  let kid = { x: 560, vx: 0, facing: 1, walk: 0 };
-  let camX = 0, near = null;
-  let farCity = null, midCity = null;
-  let started = false;
+  const SPEED = 250;
+  let kid = { x: 560, vx: 0, facing: 1, walk: 0, turn: 0, land: 0, airY: 0 };
+  let camX = 0, near = null, started = false;
+  const NPC_SPRITES = ['char.tengu', 'char.kappa', 'char.oni'];
 
-  function build() {
-    const mk = (n, minH, maxH, col) => { const a = []; let x = -60; while (x < LEN + 120) { const w = U.rand(50, 130); a.push({ x, w, h: U.rand(minH, maxH), col, lit: Math.random() < 0.3 }); x += w + U.rand(6, 30); } return a; };
-    farCity = mk(120, 60, 220, '#171009');
-    midCity = mk(140, 90, 300, '#1d140c');
-  }
-
-  function enter() {
-    if (!started) { started = true; kid.x = 560; }
-    Z.controls && (Z.controls.held.left = Z.controls.held.right = false);
-  }
+  function enter() { if (!started) { started = true; kid.x = 560; } }
 
   function frame(dt, t) {
-    if (!farCity) build();
     const W = Z.render.W, H = Z.render.H, ctx = Z.render.ctx;
-    const groundY = H * 0.82;
+    const groundY = H * 0.84;
 
     // ---- update ----
     const dir = Z.controls ? Z.controls.dir : 0;
+    if (dir && dir !== kid.facing) { kid.facing = dir; kid.turn = 1; }        // paper flip on turn
+    if (kid.turn > 0) kid.turn = Math.max(0, kid.turn - dt * 5);
     kid.vx = dir * SPEED;
-    if (dir) kid.facing = dir;
     kid.x = U.clamp(kid.x + kid.vx * dt, 30, LEN - 30);
     kid.walk = Math.abs(kid.vx) > 1 ? kid.walk + dt : 0;
     camX = U.clamp(kid.x - W * 0.5, 0, Math.max(0, LEN - W));
 
-    // nearest building
-    near = null; let best = 110;
+    near = null; let best = 120;
     for (const b of D.BUILDINGS) { const d = Math.abs(kid.x - (b.x + b.w / 2)); if (d < best) { best = d; near = b; } }
     const prompt = document.getElementById('interactPrompt');
     if (prompt) { if (near) { prompt.textContent = 'ENTER — ' + near.sign; prompt.classList.add('show'); } else prompt.classList.remove('show'); }
     if (near && Z.controls && Z.controls.consumeInteract()) { Z.audio.sfx.click(); Z.ui.show(near.screen); return; }
 
     // ---- draw ----
-    // sky
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, '#2a1e14'); g.addColorStop(0.45, '#1d1610'); g.addColorStop(1, PAL.bg);
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    const sun = ctx.createRadialGradient(W * 0.5, H * 0.42, 10, W * 0.5, H * 0.42, W * 0.6);
-    sun.addColorStop(0, U.rgba(PAL.amber, 0.13)); sun.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = sun; ctx.fillRect(0, 0, W, H); ctx.restore();
-
-    drawCity(ctx, farCity, camX * 0.35, groundY, 0.6, W);
-    drawCity(ctx, midCity, camX * 0.6, groundY, 0.85, W);
-
-    // street ground
-    if (!Z.assets.draw(ctx, 'world.ground', 0, groundY, W, H - groundY, false)) {
-      ctx.fillStyle = '#2a241b'; ctx.fillRect(0, groundY, W, H - groundY);
-      ctx.fillStyle = '#221d16'; ctx.fillRect(0, groundY, W, 6);
-      ctx.strokeStyle = 'rgba(0,0,0,.4)'; ctx.lineWidth = 2;
-      for (let x = -(camX % 120); x < W; x += 120) { ctx.beginPath(); ctx.moveTo(x, groundY + 18); ctx.lineTo(x + 40, H); ctx.stroke(); }
+    // painted street backdrop w/ gentle parallax
+    if (!Z.assets.cover(ctx, 'world.street', 0, 0, W, H, 0.5 - (camX / Math.max(1, LEN - W) - 0.5) * 0.14)) {
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, '#f0b26a'); g.addColorStop(0.55, '#d98d55'); g.addColorStop(1, '#7d5638');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     }
-    // wet puddles reflecting the dusk
-    ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    for (let i = 0; i < 8; i++) { const wx = ((i * 733) % LEN) - camX; if (wx < -80 || wx > W + 80) continue; const g = ctx.createRadialGradient(wx, groundY + 28, 2, wx, groundY + 28, 64); g.addColorStop(0, U.rgba(PAL.amber, 0.07)); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(wx, groundY + 28, 62, 8, 0, 0, U.TAU); ctx.fill(); }
-    ctx.restore();
+    // warm dusk wash + ground shade band so cutouts read
+    ctx.fillStyle = 'rgba(46,26,12,.18)'; ctx.fillRect(0, 0, W, H);
+    const gg = ctx.createLinearGradient(0, groundY - 26, 0, H);
+    gg.addColorStop(0, 'rgba(40,22,10,0)'); gg.addColorStop(1, 'rgba(40,22,10,.5)');
+    ctx.fillStyle = gg; ctx.fillRect(0, groundY - 26, W, H - groundY + 26);
 
-    // buildings
+    // torii gate near the dohyo (paper cutout)
+    drawTorii(ctx, 4060 - camX * 1, groundY, 1.15, t);
+
+    // paper shop-stand props for each doorway
     for (const b of D.BUILDINGS) {
-      const sx = b.x - camX, bh = H * 0.44, by = groundY - bh;
-      if (sx + b.w < -40 || sx > W + 40) continue;
-      if (!Z.assets.draw(ctx, b.asset, sx, by, b.w, bh, false)) drawFacade(ctx, b, sx, by, bh);
-      Z.render.pxText(ctx, b.sign, sx + b.w / 2, by - 12, 11, near === b ? PAL.amber : PAL.dim, 'center');
+      const sx = b.x - camX;
+      if (sx + b.w < -80 || sx > W + 80) continue;
+      drawStand(ctx, b, sx, groundY, t, near === b);
     }
 
-    // street lamps + warm light pools
-    for (let lx = 180; lx < LEN; lx += 360) {
-      const sx = lx - camX; if (sx < -40 || sx > W + 40) continue;
-      const fl = 0.72 + 0.28 * Math.sin(t * 6 + lx);
-      ctx.fillStyle = '#17110a'; ctx.fillRect(sx - 3, groundY - 150, 6, 150); ctx.fillRect(sx - 3, groundY - 150, 34, 6);
-      const bx = sx + 30, by = groundY - 150;
-      ctx.save(); ctx.globalCompositeOperation = 'lighter';
-      const gr = ctx.createRadialGradient(bx, by, 2, bx, by, 90); gr.addColorStop(0, U.rgba(PAL.amber, 0.5 * fl)); gr.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = gr; ctx.fillRect(bx - 90, by - 90, 180, 180);
-      const gp = ctx.createRadialGradient(bx, groundY + 12, 4, bx, groundY + 12, 120); gp.addColorStop(0, U.rgba(PAL.amber, 0.13 * fl)); gp.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = gp; ctx.beginPath(); ctx.ellipse(bx, groundY + 12, 120, 20, 0, 0, U.TAU); ctx.fill();
-      ctx.restore();
-      ctx.fillStyle = U.rgba('#ffd98a', fl); ctx.fillRect(bx - 3, by - 3, 6, 6);
-    }
+    // restored district decorations — lantern strings glow where you've driven KANE-CO out
+    const restoredIds = Object.keys(Z.state.restored || {});
+    restoredIds.forEach((id, i) => {
+      const seg = (i + 0.5) * (LEN / Math.max(4, restoredIds.length + 1));
+      drawLanternString(ctx, seg - camX, H * 0.22 + (i % 2) * 26, t + i);
+    });
 
-    // npcs
-    for (const n of D.NPCS) {
-      const sx = n.x - camX; if (sx < -40 || sx > W + 40) continue;
-      drawPerson(ctx, sx, groundY, 0.9, personColor(n.id), t * 0.5 + n.x, 1);
-      if (Math.abs(kid.x - n.x) < 120) { bubble(ctx, sx, groundY - 96, n.line); }
-    }
+    // NPC yokai (bouncing paper sprites + speech)
+    D.NPCS.forEach((n, i) => {
+      const sx = n.x - camX; if (sx < -70 || sx > W + 70) return;
+      const bob = Math.abs(Math.sin(t * 2.2 + i * 1.7)) * 6;
+      Z.render.drawSprite(NPC_SPRITES[i % 3], sx, groundY, { w: 82, bob, squash: Math.sin(t * 4.4 + i) * 0.03, sway: Math.sin(t * 1.8 + i) * 0.04, facing: kid.x < n.x ? -1 : 1 });
+      if (Math.abs(kid.x - n.x) < 130 && n.line) bubble(ctx, sx, groundY - 122, n.line);
+    });
 
-    // kid
+    // the tanuki — hop-walk with squash & stretch + paper turn-flip
     const kx = kid.x - camX;
-    if (!Z.assets.draw(ctx, 'char.kid', kx - 22, groundY - 72, 44, 72, false)) drawKid(ctx, kx, groundY, kid.facing, kid.walk);
+    const moving = Math.abs(kid.vx) > 1;
+    const hop = moving ? Math.abs(Math.sin(kid.walk * 9)) * 12 : Math.sin(t * 2.2) * 2.5;
+    const squash = moving ? Math.cos(kid.walk * 18) * 0.06 : Math.sin(t * 2.2) * 0.025;
+    if (!Z.render.drawSprite('char.tanuki', kx, groundY, { w: 112, bob: hop, squash, facing: kid.facing, turn: kid.turn, sway: moving ? Math.sin(kid.walk * 9) * 0.05 : 0 })) {
+      ctx.fillStyle = '#7a5a3a'; ctx.fillRect(kx - 18, groundY - 60, 36, 60);
+    }
+    if (moving && Math.random() < 0.2) Z.fx.dust(kx - kid.facing * 16, groundY, 1, '#c9a76b');
 
-    // foreground: sagging power lines for depth
-    ctx.strokeStyle = 'rgba(8,6,4,.8)'; ctx.lineWidth = 2;
-    for (let i = 0; i < 3; i++) { const y0 = 34 + i * 24, sag = 28 + i * 12, ph = Math.sin(t * 0.3 + i) * 6; ctx.beginPath(); ctx.moveTo(0, y0); ctx.quadraticCurveTo(W / 2, y0 + sag + ph, W, y0 - 8); ctx.stroke(); }
-
-    Z.render.drawDust(t);
+    Z.render.drawPetals(t);
   }
 
-  function drawCity(ctx, arr, off, groundY, dark, W) {
-    for (const b of arr) {
-      const sx = b.x - off; if (sx + b.w < -60 || sx > W + 60) continue;
-      ctx.fillStyle = b.col; ctx.fillRect(sx, groundY - b.h, b.w, b.h);
-      if (b.lit) { ctx.fillStyle = U.rgba(PAL.amber, 0.4 * dark); for (let i = 0; i < 3; i++) ctx.fillRect(sx + 8 + i * 16, groundY - b.h + 12, 5, 7); }
+  function drawTorii(ctx, x, groundY, s, t) {
+    const P = (p, f, o) => Z.render.paperFill(ctx, p, f, o);
+    const h = 190 * s, w = 150 * s;
+    if (x + w < -100 || x > Z.render.W + 200) return;
+    P(() => { ctx.beginPath(); ctx.rect(x - w / 2, groundY - h, 14 * s, h); }, '#c8452b');
+    P(() => { ctx.beginPath(); ctx.rect(x + w / 2 - 14 * s, groundY - h, 14 * s, h); }, '#c8452b');
+    P(() => { ctx.beginPath(); ctx.rect(x - w / 2 - 10 * s, groundY - h + 34 * s, w + 20 * s, 12 * s); }, '#c8452b');
+    P(() => { ctx.beginPath(); ctx.moveTo(x - w / 2 - 22 * s, groundY - h + 6 * s); ctx.quadraticCurveTo(x, groundY - h - 14 * s, x + w / 2 + 22 * s, groundY - h + 6 * s); ctx.lineTo(x + w / 2 + 16 * s, groundY - h + 18 * s); ctx.quadraticCurveTo(x, groundY - h - 2 * s, x - w / 2 - 16 * s, groundY - h + 18 * s); ctx.closePath(); }, '#a83a22');
+    // shimenawa tassels swinging
+    for (let i = 0; i < 3; i++) {
+      const tx = x - w * 0.3 + i * w * 0.3, sway = Math.sin(t * 1.6 + i) * 4;
+      ctx.strokeStyle = '#f5ecd7'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(tx, groundY - h + 46); ctx.lineTo(tx + sway, groundY - h + 74); ctx.stroke();
     }
   }
 
-  function drawFacade(ctx, b, sx, by, bh) {
-    ctx.fillStyle = '#2b2318'; ctx.fillRect(sx, by, b.w, bh);
-    ctx.fillStyle = '#221c14'; ctx.fillRect(sx, by, b.w, 10);
-    // awning
-    ctx.fillStyle = PAL.rust; ctx.fillRect(sx - 4, by + bh * 0.4, b.w + 8, 12);
-    ctx.fillStyle = '#3a2e1e'; for (let i = 0; i < (b.w / 14 | 0); i++) if (i % 2) ctx.fillRect(sx - 4 + i * 14, by + bh * 0.4, 14, 12);
-    // door + window
-    ctx.fillStyle = '#120d08'; ctx.fillRect(sx + b.w * 0.4, by + bh * 0.55, b.w * 0.2, bh * 0.45);
-    ctx.fillStyle = U.rgba(PAL.amber, 0.5); ctx.fillRect(sx + b.w * 0.12, by + bh * 0.55, b.w * 0.18, bh * 0.2);
-    ctx.strokeStyle = '#0c0906'; ctx.lineWidth = 2; ctx.strokeRect(sx, by, b.w, bh);
-  }
-
-  function personColor(id) { return { n1: '#7a5a3a', n2: '#5f6f8f', n3: '#6f5f4a', n4: '#8a5f5f' }[id] || '#6a5a4a'; }
-
-  function drawPerson(ctx, x, groundY, scale, col, phase, facing) {
-    const bob = Math.sin(phase) * 2; const s = scale;
-    ctx.save(); ctx.translate(x, bob);
-    ctx.fillStyle = '#000'; ctx.globalAlpha = 0.35; ctx.beginPath(); ctx.ellipse(0, groundY, 20 * s, 5, 0, 0, U.TAU); ctx.fill(); ctx.globalAlpha = 1;
-    ctx.fillStyle = col; ctx.fillRect(-9 * s, groundY - 44 * s, 18 * s, 30 * s);      // torso
-    ctx.fillStyle = '#e9d8bf'; ctx.fillRect(-7 * s, groundY - 58 * s, 14 * s, 14 * s); // head
-    ctx.fillStyle = col; ctx.fillRect(-8 * s, groundY - 14 * s, 6 * s, 14 * s); ctx.fillRect(2 * s, groundY - 14 * s, 6 * s, 14 * s); // legs
+  function drawStand(ctx, b, sx, groundY, t, hot) {
+    const P = (p, f, o) => Z.render.paperFill(ctx, p, f, o);
+    const w = Math.min(b.w, 290), h = 168, x = sx + (b.w - w) / 2, y = groundY - h;
+    const wob = Math.sin(t * 1.4 + b.x) * 0.008;
+    ctx.save(); ctx.translate(x + w / 2, groundY); ctx.rotate(wob); ctx.translate(-(x + w / 2), -groundY);
+    // stall body + noren curtain roof
+    P(() => Z.render.roundRect(ctx, x, y + 34, w, h - 34, 10), '#e8d9b5');
+    P(() => { ctx.beginPath(); ctx.moveTo(x - 12, y + 40); ctx.lineTo(x + w / 2, y - 4); ctx.lineTo(x + w + 12, y + 40); ctx.closePath(); }, hot ? '#d94f30' : '#b8563c');
+    // noren strips
+    for (let i = 0; i < 4; i++) { const nx = x + 10 + i * (w - 20) / 3.2, swy = Math.sin(t * 2 + i) * 2.4; ctx.fillStyle = '#f5ecd7'; ctx.fillRect(nx, y + 40, 12, 22 + swy); ctx.strokeStyle = '#2f2418'; ctx.lineWidth = 1.6; ctx.strokeRect(nx, y + 40, 12, 22 + swy); }
+    // doorway
+    P(() => Z.render.roundRect(ctx, x + w / 2 - 26, groundY - 72, 52, 72, 7), '#4a3826', { noShadow: true, cut: 3 });
+    // paper lantern bobbing by the door
+    const lb = Math.sin(t * 2.2 + b.x) * 3;
+    P(() => { ctx.beginPath(); ctx.ellipse(x + w - 18, groundY - 72 + lb, 11, 14, 0, 0, U.TAU); }, hot ? '#ffb35c' : '#e8a33d', { noShadow: true, cut: 3 });
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const lg = ctx.createRadialGradient(x + w - 18, groundY - 72 + lb, 2, x + w - 18, groundY - 72 + lb, 40);
+    lg.addColorStop(0, 'rgba(255,190,110,.5)'); lg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = lg; ctx.fillRect(x + w - 58, groundY - 112, 80, 80); ctx.restore();
+    Z.render.pxText(ctx, b.sign, x + w / 2, y + 26, hot ? 15 : 12, hot ? '#ffe9bf' : '#f5ecd7', 'center');
     ctx.restore();
   }
 
-  function drawKid(ctx, x, groundY, facing, walk) {
-    const s = 1; const step = Math.sin(walk * 12);
-    ctx.save(); ctx.translate(x, 0); ctx.scale(facing, 1);
-    ctx.fillStyle = '#000'; ctx.globalAlpha = 0.4; ctx.beginPath(); ctx.ellipse(0, groundY, 22, 6, 0, 0, U.TAU); ctx.fill(); ctx.globalAlpha = 1;
-    // legs
-    ctx.fillStyle = '#2f2a20';
-    ctx.fillRect(-8, groundY - 18 + Math.max(0, step) * 2, 7, 18); ctx.fillRect(2, groundY - 18 + Math.max(0, -step) * 2, 7, 18);
-    // body (hoodie)
-    ctx.fillStyle = PAL.rust; ctx.fillRect(-11, groundY - 44, 22, 28);
-    ctx.fillStyle = U.shade(PAL.rust, -0.2); ctx.fillRect(-11, groundY - 44, 22, 4);
-    // arm
-    ctx.fillStyle = PAL.rust; ctx.fillRect(6, groundY - 40 + step * 2, 6, 16);
-    // head + hood
-    ctx.fillStyle = '#e9d8bf'; ctx.fillRect(-8, groundY - 60, 16, 16);
-    ctx.fillStyle = '#3a2e1e'; ctx.fillRect(-9, groundY - 62, 18, 6); ctx.fillRect(-9, groundY - 62, 4, 16);
-    ctx.fillStyle = '#1a1109'; ctx.fillRect(2, groundY - 54, 4, 3); // eye
-    ctx.restore();
+  function drawLanternString(ctx, x, y, t) {
+    if (x < -300 || x > Z.render.W + 300) return;
+    ctx.strokeStyle = 'rgba(35,22,10,.7)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x - 190, y); ctx.quadraticCurveTo(x, y + 42, x + 190, y); ctx.stroke();
+    for (let i = 0; i < 5; i++) {
+      const lt = -0.8 + i * 0.4, lx = x + lt * 190, ly = y + (1 - lt * lt) * 34 + Math.sin(t * 2 + i) * 3;
+      const col = ['#ff8f5e', '#ffd98a', '#8fd0b8', '#ffd98a', '#ff8f5e'][i];
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(lx, ly, 1, lx, ly, 26); g.addColorStop(0, 'rgba(255,200,120,.55)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g; ctx.fillRect(lx - 26, ly - 26, 52, 52); ctx.restore();
+      ctx.fillStyle = col; ctx.strokeStyle = '#2f2418'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(lx, ly + 8, 8, 11, 0, 0, U.TAU); ctx.fill(); ctx.stroke();
+    }
   }
 
   function bubble(ctx, x, y, text) {
-    ctx.save(); ctx.font = '11px "VT323", monospace';
-    const lines = wrap(text, 26); const w = 170, h = 14 + lines.length * 15;
-    ctx.fillStyle = 'rgba(12,9,5,.92)'; ctx.fillRect(x - w / 2, y - h, w, h);
-    ctx.strokeStyle = PAL.amber; ctx.lineWidth = 2; ctx.strokeRect(x - w / 2, y - h, w, h);
-    ctx.fillStyle = PAL.ink; ctx.textAlign = 'center'; ctx.font = '15px "VT323", monospace';
-    lines.forEach((ln, i) => ctx.fillText(ln, x, y - h + 16 + i * 15));
+    ctx.save();
+    const lines = wrap(text, 30); const w = 210, h = 16 + lines.length * 17;
+    const bx = U.clamp(x, w / 2 + 8, Z.render.W - w / 2 - 8);
+    Z.render.paperFill(ctx, () => Z.render.roundRect(ctx, bx - w / 2, y - h, w, h, 12), '#f5ecd7', { cut: 0.001 });
+    ctx.fillStyle = '#f5ecd7'; ctx.beginPath(); ctx.moveTo(x - 6, y - 2); ctx.lineTo(x + 8, y - 2); ctx.lineTo(x + 2, y + 9); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#2f2418'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = '#2f2418'; ctx.textAlign = 'center'; ctx.font = "700 14px 'Zen Maru Gothic', sans-serif";
+    lines.forEach((ln, i) => ctx.fillText(ln, bx, y - h + 20 + i * 17));
     ctx.restore();
   }
   function wrap(t, n) { const w = t.split(' '), out = []; let l = ''; for (const word of w) { if ((l + word).length > n) { out.push(l.trim()); l = ''; } l += word + ' '; } if (l.trim()) out.push(l.trim()); return out; }

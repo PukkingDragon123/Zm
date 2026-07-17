@@ -1,71 +1,55 @@
-# ZUMO — STREET SCRAPPERS
+# ZUMO — Spirit Town Scrappers
 
-**A gritty post-apocalyptic street game about building junk battle-bots and brawling up the block.**
+**A paper-cutout yokai adventure.** The human megacorp KANE-CO sent its soulless
+robots to strip the spirit world for profit. The yokai fight back the only way
+spirits can: they manifest battle-puppets out of wood, rope and glowing rune
+stones — and duel in the dohyo.
 
-After the grid went dark, the kids of Block 7 rebuilt the only thing worth
-fighting over: scrap battle-bots. Walk the strip, weld a scrapper at your bench,
-and brawl your way from gutter nobody to king of the Pit.
+You are the round new tanuki in town. Build a spirit puppet at your den, take
+requests with your crew, drive KANE-CO out district by district, and become
+grand champion.
 
-Self-contained web game — **vanilla JS + HTML5 Canvas, no build step, no dependencies.**
-Open `index.html` on any static host (works on GitHub Pages).
+Self-contained web game — **vanilla JS + HTML5 Canvas, no build step.** Open
+`index.html` on any static host.
 
 ## Play
 
-- **The strip** — a side-scrolling street. Walk with **A / D** (or the on-screen
-  `<` `>` pad). Stop at a shop and press **W / ENTER** to go in. Chat to NPCs.
-- **Home / the bench** — a hands-on workbench: **drag junk parts onto your bot**
-  (heavy parts swing — physics), drop them on a mount to bolt them in, or in the
-  scrap bin to sell. Balance weight, power and the energy budget live.
-- **Tanaka's** — buy parts with cash or scrap; sell spares.
-- **Ol' Boy Ramen** — buy a bowl for a one-fight buff.
-- **Scrap Alley** — push-your-luck dig for free parts; bank before a mine hits.
-- **The Job Board** — contracts for cash, scrap and rank.
-- **The Pit** — pick a rival and brawl.
+- **Main street** — walk with **A / D**, enter doorways with **W / ENTER**. Talk
+  to townsfolk yokai; petals fall; restored districts light up with lanterns.
+- **Your den** — physics-drag workbench: hang wood, charms and rune stones on
+  your puppet. Rune stones set the spirit budget — overdraw and it sputters.
+- **The dohyo** — side-view puppet duels beneath the burning shrine:
+  **HIT** (J) · **JUMP** (W) · **SKILL** spirit burst (K) · **BLOCK** ward (L/Shift).
+  Full touch pad on mobile. Yokai puppeteers stand ringside holding glowing
+  spirit strings; KANE-CO sends a hovering middle-manager drone.
+- **Request board** — Persona-style jobs from villagers: bring a crew partner,
+  clear enemy **waves**, restore the district, get paid.
+- **The teahouse** — friendship dialogues with your crew (Tengu, Kappa, Oni).
+  Higher friendship = stronger battle support (sharper attacks, mid-mission
+  repairs, iron armor).
+- **Ao's ramen** — the blue broom yokai serves snacks that buff your next fight.
+- **Junk grove** — push-your-luck digging for free parts.
 
-## The Pit (battle)
+## Credits & art
 
-Side-view 2D brawls. You and the rival each stand at the edge holding a
-controller while your bots fight in front of a crowd.
-
-| Action | Keyboard | On-screen pad |
-|---|---|---|
-| Move | A / D (or arrows) | `<` `>` |
-| Attack | J | HIT |
-| Skill (heavy special) | K | SKL |
-| Block | L / Shift (hold) | BLK |
-
-Drop the rival's HP to zero for a knockout. Climb eight tiers of rival to
-dethrone **Apex-Zero** and become king of the block.
-
-## Look & feel
-
-Gritty post-apocalyptic street: dusty amber dusk, rusted steel and concrete,
-hand-painted signs, dim broken neon. Pixel fonts, heavy grain and haze, no
-flashy holo-UI. Everything (world, bots, effects, part icons) is drawn
-procedurally on canvas; audio is synthesized live.
-
-**Add your own art:** the world/characters/battle render as layered placeholders
-you can replace with PNGs — see [`assets/README.md`](assets/README.md). Drop files
-in and they appear automatically; no code changes.
+Character art and painted backdrops in `assets/` were supplied by the project
+owner. Everything else — the paper-cutout puppet renderer, VFX (spirit circles,
+speed lines, shockwaves, petals), pentatonic koto/taiko soundtrack and SFX — is
+procedural, in-code.
 
 ## Files
 
 ```
-index.html            screens + canvas + script order
-css/style.css         pixel / gritty stylesheet
-js/util.js            math / dom / color / event bus
-js/assets.js          layered image loader (+ placeholders)
-js/audio.js           synthesized music + SFX
-js/data.js            content: parts, rivals, ranks, jobs, buildings, npcs, ramen
-js/save.js  state.js  persistence + game state
-js/bot.js             build model + stat computation
-js/fx.js              particles, shake, hit-stop, slow-mo, damage numbers
-js/render.js          street ambient + side-view bot renderer + pixel text
-js/controls.js        keyboard + on-screen pad (move/hit/skill/block)
-js/ui.js              screen manager, money HUD, toasts, tooltips
-js/overworld.js       the side-scrolling strip
-js/workbench.js       physics-drag build bench
-js/shop.js ramen.js scavenge.js quests.js ladder.js   the interiors
-js/combat.js          The Pit — side-view brawl, crowd, operators, VFX
-js/game.js            bootstrap + main loop
+index.html            screens + script order
+css/style.css         washi-paper / hanko-stamp UI
+js/content.js         generated narrative content (names, dialogue, missions)
+js/data.js            parts, puppets, enemies, ranks, crew, missions, snacks
+js/render.js          paper-cutout renderer: sprites, humanoid puppets, petals
+js/overworld.js       main street (side-scroll)
+js/combat.js          the dohyo: waves, jump/hit/skill/block, puppeteers
+js/crew.js            teahouse friendship dialogues
+js/quests.js          request board (missions) + bounties
+js/workbench.js       physics-drag puppet bench
+js/shop.js ramen.js scavenge.js ladder.js   interiors
+js/fx.js audio.js controls.js ui.js state.js save.js bot.js game.js
 ```

@@ -149,39 +149,37 @@ Z.audio = (function () {
   function stopWhir() { if (whir) { try { whir.o.stop(ctx.currentTime + 0.1); } catch (e) {} whir = null; } }
 
   // ---------- MUSIC (step sequencer) ----------
-  // A minor darksynth loop. Notes in Hz.
-  const N = { A1: 55, C2: 65.41, D2: 73.42, E2: 82.41, F2: 87.31, G2: 98, A2: 110, C3: 130.8, D3: 146.8, E3: 164.8, F3: 174.6, G3: 196, A3: 220, C4: 261.6, D4: 293.7, E4: 329.6, F4: 349.2, G4: 392, A4: 440 };
-  // 16-step patterns per section; two moods
+  // Japanese pentatonic (A C D E G) — koto plucks, warm pad, taiko drums.
+  const N = { A1: 55, C2: 65.41, D2: 73.42, E2: 82.41, G2: 98, A2: 110, C3: 130.8, D3: 146.8, E3: 164.8, G3: 196, A3: 220, C4: 261.6, D4: 293.7, E4: 329.6, G4: 392, A4: 440, C5: 523.3, D5: 587.3, E5: 659.3 };
   const PAT = {
-    menu: {
-      tempo: 72,
-      bass: ['A1', 0, 0, 0, 'A1', 0, 'G2', 0, 'F2', 0, 0, 0, 'E2', 0, 0, 0],
-      arp: ['A3', 'C4', 'E4', 'C4', 'A3', 'C4', 'E4', 'G4', 'F3', 'A3', 'C4', 'A3', 'E3', 'G3', 'G3', 'E4'],
-      pad: [['A2', 'C3', 'E3'], null, null, null, ['A2', 'C3', 'E3'], null, null, null, ['F2', 'A2', 'C3'], null, null, null, ['E2', 'G2', 'D3'], null, null, null],
-      drums: 'k...h...ks..h...',
+    menu: {   // lazy evening in spirit town
+      tempo: 66,
+      bass: ['A1', 0, 0, 0, 0, 0, 'G2', 0, 'C2', 0, 0, 0, 'E2', 0, 0, 0],
+      arp: ['A3', 0, 'C4', 'E4', 0, 'D4', 0, 'A3', 'G3', 0, 'C4', 0, 'E4', 0, 'D4', 'C4'],
+      pad: [['A2', 'E3'], null, null, null, null, null, null, null, ['C3', 'G3'], null, null, null, ['E3', 'A3'], null, null, null],
+      drums: 'k.......k...t...',
     },
-    combat: {
-      tempo: 108,
-      bass: ['A1', 'A1', 0, 'A1', 'A1', 0, 'A1', 'A1', 'C2', 'C2', 0, 'C2', 'G2', 0, 'F2', 0],
-      arp: ['A4', 'E4', 'A4', 'C4', 'E4', 'A4', 'E4', 'C4', 'C4', 'G4', 'C4', 'E4', 'G4', 'E4', 'D4', 'E4'],
-      pad: [['A2', 'E3'], null, null, null, ['A2', 'E3'], null, null, null, ['C3', 'G3'], null, null, null, ['F2', 'C3'], null, null, null],
-      drums: 'k.h.k.hkk.h.k.h.',
+    combat: { // taiko duel at the shrine
+      tempo: 112,
+      bass: ['A1', 0, 'A1', 0, 'C2', 0, 'A1', 0, 'G2', 0, 'E2', 0, 'A1', 0, 'D2', 0],
+      arp: ['A4', 'E4', 'G4', 'A4', 0, 'C5', 'A4', 'G4', 'E4', 'G4', 'A4', 'C5', 'D5', 'C5', 'A4', 'G4'],
+      pad: [['A2', 'E3'], null, null, null, ['C3', 'G3'], null, null, null, ['G2', 'D3'], null, null, null, ['A2', 'E3'], null, null, null],
+      drums: 'kk..t.k.kk..t.tt',
     },
   };
 
   function playStep(p, s, when) {
     if (!ctx) return;
-    // bass
-    const bn = p.bass[s]; if (bn && N[bn]) tone({ type: 'sawtooth', f: N[bn], t: when, dur: 0.24, g: 0.22, filter: 'lowpass', cutoff: 420, dest: musicGain });
-    // arp (quieter, delayed feel)
-    const an = p.arp[s]; if (an && N[an]) tone({ type: 'triangle', f: N[an], t: when, dur: 0.18, g: 0.028, filter: 'lowpass', cutoff: 1500, dest: musicGain, reverb: true });
-    // pad on downbeats
-    const pd = p.pad[s]; if (pd) pd.forEach((nn) => { if (N[nn]) tone({ type: 'sine', f: N[nn], t: when, dur: 0.9, g: 0.05, atk: 0.15, dest: musicGain, reverb: true }); });
-    // drums
+    // low koto pluck (bass)
+    const bn = p.bass[s]; if (bn && N[bn]) tone({ type: 'triangle', f: N[bn], t: when, dur: 0.5, g: 0.24, filter: 'lowpass', cutoff: 700, dest: musicGain });
+    // koto melody: sharp attack, quick decay, slight reverb
+    const an = p.arp[s]; if (an && N[an]) { tone({ type: 'triangle', f: N[an], t: when, dur: 0.34, g: 0.06, atk: 0.002, filter: 'lowpass', cutoff: 2600, dest: musicGain, reverb: true }); tone({ type: 'sine', f: N[an] * 2, t: when, dur: 0.1, g: 0.018, atk: 0.002, dest: musicGain }); }
+    // warm pad
+    const pd = p.pad[s]; if (pd) pd.forEach((nn) => { if (N[nn]) tone({ type: 'sine', f: N[nn], t: when, dur: 1.4, g: 0.04, atk: 0.3, dest: musicGain, reverb: true }); });
+    // taiko drums: k = big daiko, t = rim/shime tap
     const dr = p.drums[s];
-    if (dr === 'k') { tone({ type: 'sine', f: 120, f2: 45, t: when, dur: 0.16, g: 0.4, dest: musicGain }); }
-    else if (dr === 's') { noise({ filter: 'highpass', cutoff: 1800, dur: 0.14, g: 0.18, t: when, dest: musicGain }); }
-    else if (dr === 'h') { noise({ filter: 'highpass', cutoff: 6000, dur: 0.04, g: 0.08, t: when, dest: musicGain }); }
+    if (dr === 'k') { tone({ type: 'sine', f: 90, f2: 38, t: when, dur: 0.24, g: 0.5, dest: musicGain }); noise({ filter: 'lowpass', cutoff: 300, dur: 0.06, g: 0.12, t: when, dest: musicGain }); }
+    else if (dr === 't') { noise({ filter: 'bandpass', cutoff: 2600, q: 2, dur: 0.05, g: 0.1, t: when, dest: musicGain }); }
   }
 
   function startMusic() {

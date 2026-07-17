@@ -3,17 +3,17 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-<meta name="theme-color" content="#100d0a" />
-<title>ZUMO — STREET SCRAPPERS</title>
-<meta name="description" content="A post-apocalyptic street game: build junk battle-bots and brawl your way up the block." />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Crect width='16' height='16' fill='%23100d0a'/%3E%3Crect x='4' y='5' width='8' height='6' fill='%23a6552f'/%3E%3Crect x='5' y='7' width='2' height='2' fill='%23e8a33d'/%3E%3Crect x='9' y='7' width='2' height='2' fill='%23e8a33d'/%3E%3C/svg%3E" />
+<meta name="theme-color" content="#f2e5c9" />
+<title>ZUMO — Spirit Town Scrappers</title>
+<meta name="description" content="A paper-cutout yokai adventure: manifest wooden spirit-puppets, take jobs with your crew, and drive KANE-CO's corporate robots out of Spirit Town." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23f2e5c9'/%3E%3Ccircle cx='8' cy='8' r='5' fill='%23d94f30'/%3E%3Ccircle cx='8' cy='8' r='2' fill='%23f2e5c9'/%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
 <canvas id="stage"></canvas>
 
-<!-- gritty post overlays -->
+<!-- soft paper overlays -->
 <div id="fog"></div>
 <div id="grain"></div>
 <div id="vig"></div>
@@ -23,9 +23,9 @@
 
   <!-- BOOT -->
   <section class="screen" data-screen="boot">
-    <div class="boot">
+    <div class="boot paper">
       <div class="boot-title">ZUMO</div>
-      <div class="boot-sub">STREET SCRAPPERS</div>
+      <div class="boot-sub">SPIRIT TOWN SCRAPPERS</div>
       <div class="boot-bar"><i></i></div>
       <div class="boot-log" id="bootLog"></div>
     </div>
@@ -35,43 +35,41 @@
   <section class="screen" data-screen="title">
     <div class="title">
       <div class="title-logo">ZUMO</div>
-      <div class="title-word">STREET SCRAPPERS</div>
-      <p class="title-sub" id="titleSub"></p>
+      <div class="title-word">SPIRIT TOWN SCRAPPERS</div>
+      <p class="title-sub paper" id="titleSub"></p>
       <div class="title-menu">
-        <button class="pbtn big" data-act="play">START</button>
+        <button class="pbtn big stamp" data-act="play">BEGIN</button>
         <button class="pbtn" data-act="how">HOW TO PLAY</button>
-        <button class="pbtn" data-act="reset">WIPE SAVE</button>
+        <button class="pbtn" data-act="reset">NEW JOURNEY</button>
       </div>
-      <div class="title-foot">move: A / D &nbsp; enter: W &nbsp; a full pad shows on touch</div>
+      <div class="title-foot">walk: A / D · enter: W · touch pad appears on mobile</div>
     </div>
   </section>
 
-  <!-- WORLD (side-scroll overworld; canvas does the work) -->
+  <!-- WORLD -->
   <section class="screen" data-screen="world">
     <div class="world-hud">
-      <div class="money" id="worldMoney">0</div>
+      <div class="money paper-chip" id="worldMoney">0</div>
       <button class="pbtn tiny" data-act="settings">MENU</button>
     </div>
     <div class="interact" id="interactPrompt"></div>
   </section>
 
-  <!-- WORKBENCH (canvas drag-build) -->
+  <!-- WORKBENCH / DEN -->
   <section class="screen" data-screen="workbench">
     <div class="bench-hud">
       <button class="pbtn tiny" data-act="world">LEAVE</button>
-      <div class="bench-name-wrap">
-        <input id="benchName" class="bench-name" maxlength="14" spellcheck="false" />
-      </div>
-      <div class="bench-readout" id="benchReadout"></div>
+      <div class="bench-name-wrap"><input id="benchName" class="bench-name" maxlength="14" spellcheck="false" /></div>
+      <div class="bench-readout paper-chip" id="benchReadout"></div>
     </div>
     <div class="bench-tools" id="benchTools"></div>
   </section>
 
-  <!-- TOY SHOP -->
+  <!-- CURIO SHOP -->
   <section class="screen" data-screen="shop">
-    <div class="interior">
-      <div class="int-head"><button class="pbtn tiny" data-act="world">LEAVE</button><h2>TANAKA'S TOY &amp; SCRAP</h2><div class="int-money" id="shopMoney">0</div></div>
-      <div class="int-npc" id="shopNpc"></div>
+    <div class="interior shop-bg">
+      <div class="int-head"><button class="pbtn tiny" data-act="world">LEAVE</button><h2>KITSUNE CURIO SHOP</h2><div class="int-money" id="shopMoney">0</div></div>
+      <div class="int-npc paper" id="shopNpc"></div>
       <div class="shop-filter" id="shopFilter"></div>
       <div class="shop-list" id="shopList"></div>
     </div>
@@ -79,48 +77,60 @@
 
   <!-- RAMEN -->
   <section class="screen" data-screen="ramen">
-    <div class="interior">
-      <div class="int-head"><button class="pbtn tiny" data-act="world">LEAVE</button><h2>OL' BOY RAMEN</h2><div class="int-money" id="ramenMoney">0</div></div>
-      <div class="int-npc" id="ramenNpc"></div>
+    <div class="interior ramen-bg">
+      <div class="int-head"><button class="pbtn tiny" data-act="world">LEAVE</button><h2>AO'S RAMEN</h2><div class="int-money" id="ramenMoney">0</div></div>
+      <div class="ramen-stage"><img id="aoSprite" src="assets/char/aoyokai.png" alt="" draggable="false" /></div>
+      <div class="int-npc paper" id="ramenNpc"></div>
       <div class="ramen-list" id="ramenList"></div>
     </div>
   </section>
 
-  <!-- JOB BOARD -->
+  <!-- REQUEST BOARD (missions + bounties) -->
   <section class="screen" data-screen="quests">
     <div class="interior">
-      <div class="int-head"><button class="pbtn tiny" data-act="world">LEAVE</button><h2>THE JOB BOARD</h2><div class="int-money" id="qMoney">0</div></div>
-      <div class="quests" id="questList"></div>
+      <div class="int-head"><button class="pbtn tiny" data-act="world">LEAVE</button><h2>REQUEST BOARD</h2><div class="int-money" id="qMoney">0</div></div>
+      <div class="board-tabs" id="boardTabs"></div>
+      <div class="quests" id="missionList"></div>
+      <div class="quests" id="questList" style="display:none"></div>
     </div>
   </section>
 
-  <!-- SCRAP ALLEY -->
+  <!-- TEAHOUSE / CREW -->
+  <section class="screen" data-screen="crew">
+    <div class="interior tea-bg">
+      <div class="int-head"><button class="pbtn tiny" data-act="world">LEAVE</button><h2>THE TEAHOUSE</h2><div class="int-money" id="crewMoney">0</div></div>
+      <div class="crew-list" id="crewList"></div>
+    </div>
+    <div class="talk-layer" id="crewTalk"></div>
+  </section>
+
+  <!-- JUNK GROVE -->
   <section class="screen" data-screen="scavenge">
     <div class="interior">
-      <div class="int-head"><button class="pbtn tiny" data-act="world">LEAVE</button><h2>SCRAP ALLEY</h2>
-        <div class="int-money"><span id="scvDigs">0</span> digs</div></div>
+      <div class="int-head"><button class="pbtn tiny" data-act="world">LEAVE</button><h2>THE JUNK GROVE</h2>
+        <div class="int-money nodollar"><span id="scvDigs">0</span> digs</div></div>
       <div class="scv-hint" id="scvHint"></div>
       <div class="scv-grid" id="scvGrid"></div>
       <div class="scv-actions">
-        <button class="pbtn" data-act="scvNew">NEW ALLEY (<span id="scvCost">40</span>)</button>
-        <div class="scv-haul" id="scvHaul"></div>
+        <button class="pbtn" data-act="scvNew">NEW GROVE (<span id="scvCost">40</span>)</button>
+        <div class="scv-haul paper-chip" id="scvHaul"></div>
       </div>
     </div>
   </section>
 
-  <!-- ARENA / LADDER -->
+  <!-- DOHYO / LADDER -->
   <section class="screen" data-screen="ladder">
     <div class="interior">
-      <div class="int-head"><button class="pbtn tiny" data-act="world">LEAVE</button><h2>THE PIT — PICK A SCRAP</h2><div class="int-money" id="ladMoney">0</div></div>
+      <div class="int-head"><button class="pbtn tiny" data-act="world">LEAVE</button><h2>THE DOHYO — CHALLENGE</h2><div class="int-money" id="ladMoney">0</div></div>
       <div class="ladder" id="ladderList"></div>
     </div>
   </section>
 
-  <!-- BATTLE (side-scroll; canvas + pad) -->
+  <!-- BATTLE -->
   <section class="screen" data-screen="battle">
     <div class="battle-hud">
       <div class="bhp left"><div class="bhp-name" id="bhpNameL">YOU</div><div class="bhp-bar"><i id="bhpL"></i></div><div class="bhp-en"><i id="benL"></i></div></div>
-      <div class="btimer" id="bTimer"></div>
+      <div class="btimer paper-chip" id="bTimer"></div>
       <div class="bhp right"><div class="bhp-name" id="bhpNameR">RIVAL</div><div class="bhp-bar"><i id="bhpR"></i></div><div class="bhp-en"><i id="benR"></i></div></div>
     </div>
     <div class="announce" id="announce"></div>
@@ -128,44 +138,42 @@
 
   <!-- RESULT -->
   <section class="screen" data-screen="result">
-    <div class="result">
+    <div class="result paper">
       <div class="result-band" id="resultBand"></div>
       <div class="result-body" id="resultBody"></div>
       <div class="result-cta">
-        <button class="pbtn big" data-act="rematch">REMATCH</button>
-        <button class="pbtn" data-act="ladder">THE PIT</button>
-        <button class="pbtn" data-act="world">STREET</button>
+        <button class="pbtn big stamp" data-act="rematch">AGAIN</button>
+        <button class="pbtn" data-act="ladder">DOHYO</button>
+        <button class="pbtn" data-act="world">TOWN</button>
       </div>
     </div>
   </section>
 
   <!-- SETTINGS -->
   <section class="screen" data-screen="settings">
-    <div class="panel">
+    <div class="panel paper">
       <h2>MENU</h2>
       <label class="set-row"><span>MUSIC</span><input type="range" id="setMusic" min="0" max="100"></label>
-      <label class="set-row"><span>SFX</span><input type="range" id="setSfx" min="0" max="100"></label>
+      <label class="set-row"><span>SOUND</span><input type="range" id="setSfx" min="0" max="100"></label>
       <label class="set-row"><span>SHAKE</span><input type="checkbox" id="setShake"></label>
-      <label class="set-row"><span>GRAIN</span><input type="checkbox" id="setCrt"></label>
-      <label class="set-row"><span>DUST</span><input type="checkbox" id="setRain"></label>
+      <label class="set-row"><span>PAPER GRAIN</span><input type="checkbox" id="setCrt"></label>
+      <label class="set-row"><span>PETALS</span><input type="checkbox" id="setRain"></label>
       <div class="set-cta"><button class="pbtn" data-act="closeMenu">BACK</button></div>
     </div>
   </section>
 
   <!-- HOW -->
   <section class="screen" data-screen="how">
-    <div class="panel">
+    <div class="panel paper">
       <h2>HOW TO PLAY</h2>
       <div class="how" id="howGrid"></div>
-      <button class="pbtn big" data-act="title">OK</button>
+      <button class="pbtn big stamp" data-act="title">OK</button>
     </div>
   </section>
 
 </div>
 
-<!-- on-screen controller (populated by controls.js) -->
 <div id="pad"></div>
-
 <div id="wipe"></div>
 <div id="titlecard"><b id="tcText"></b><i id="tcSub"></i></div>
 <div id="toasts"></div>
@@ -174,6 +182,7 @@
 <script src="js/util.js"></script>
 <script src="js/assets.js"></script>
 <script src="js/audio.js"></script>
+<script src="js/content.js"></script>
 <script src="js/data.js"></script>
 <script src="js/save.js"></script>
 <script src="js/state.js"></script>
@@ -186,6 +195,7 @@
 <script src="js/scavenge.js"></script>
 <script src="js/shop.js"></script>
 <script src="js/ramen.js"></script>
+<script src="js/crew.js"></script>
 <script src="js/quests.js"></script>
 <script src="js/ladder.js"></script>
 <script src="js/overworld.js"></script>

@@ -35,9 +35,9 @@ Z.workbench = (function () {
     const bw = r * 2.5, bh = r * 1.15, by = groundY - r * 0.78 - bh;
     slots = [];
     const add = (cat, index, x, y, label) => slots.push({ cat, index, x, y, r: 30, label });
-    add('generator', 0, cx - bw * 0.28, by + bh * 0.3, 'GEN');
-    add('motor', 0, cx, groundY - 6, 'MOT');
-    add('wheels', 0, cx + bw * 0.1, groundY + 6, 'WHL');
+    add('generator', 0, cx - bw * 0.28, by + bh * 0.3, 'RUNE');
+    add('motor', 0, cx, groundY - 6, 'WHEEL');
+    add('wheels', 0, cx + bw * 0.1, groundY + 6, 'FEET');
     for (let i = 0; i < ch.slots.weapon; i++) add('weapon', i, cx + bw * 0.5 + 10, by + bh * 0.35 + i * 40, 'WPN');
     for (let i = 0; i < ch.slots.armor; i++) add('armor', i, cx - bw * 0.1 + i * 34, by - 12, 'ARM');
     for (let i = 0; i < ch.slots.utility; i++) add('utility', i, cx - bw * 0.5 - 6, by + bh * 0.4 + i * 38, 'UTL');
@@ -127,7 +127,7 @@ Z.workbench = (function () {
     el.innerHTML = `HP <b>${Math.round(sp.maxHp)}</b> · PWR <b>${Math.round(sp.power)}</b> · SPD <b>${Math.round(sp.speedStat)}</b><br>` +
       `GRIP <b>${Math.round(sp.tractionStat)}</b> · ARM <b>${sp.armor}%</b> · WT <b>${Math.round(sp.mass)}</b><br>` +
       `<span class="${over ? 'over' : ''}">PWR ${agg.energyDraw}/${agg.energyProvide}${over ? ' OVERDRAWN' : ''}</span> · RATING <b>${sp.rating}</b>` +
-      (c.ready ? '' : ' · <span class="over">NEEDS MOTOR+WHEELS</span>');
+      (c.ready ? '' : ' · <span class="over">NEEDS WHEEL+SANDALS</span>');
   }
 
   // ---- draw (called by game loop) ----
@@ -188,7 +188,7 @@ Z.workbench = (function () {
       ctx.beginPath(); ctx.arc(0, 0, r, 0, U.TAU); ctx.stroke();
       for (let s = 0; s < 2; s++) { ctx.beginPath(); for (let i = 0; i < 3; i++) { const a = s * Math.PI + i / 3 * U.TAU - Math.PI / 2, px = Math.cos(a) * r * 0.8, py = Math.sin(a) * r * 0.8; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.closePath(); ctx.stroke(); }
       ctx.restore();
-      Z.render.pxText(ctx, 'TRANSMUTE', bolt.x, bolt.y - r - 10, 9, '#bfe9ff', 'center');
+      Z.render.pxText(ctx, 'BLESSED', bolt.x, bolt.y - r - 10, 10, '#8fe6cf', 'center');
       if (bolt.t <= 0) bolt = null;
     }
   }
@@ -210,9 +210,9 @@ Z.workbench = (function () {
 
   function buildFilters() {
     const host = $('#benchTools'); if (!host) return; U.clear(host);
-    [['all', 'ALL'], ['chassis', 'FRM'], ['generator', 'GEN'], ['motor', 'MOT'], ['wheels', 'WHL'], ['weapon', 'WPN'], ['armor', 'ARM'], ['utility', 'UTL']].forEach(([k, l]) => {
+    [['all', 'ALL'], ['chassis', 'FRM'], ['generator', 'RUNE'], ['motor', 'WHL'], ['wheels', 'FEET'], ['weapon', 'WPN'], ['armor', 'ARM'], ['utility', 'CHRM']].forEach(([k, l]) => {
       const t = U.el('div', 'tool' + (filter === k ? ' on' : ''));
-      t.textContent = l; t.style.fontFamily = 'Press Start 2P, monospace'; t.style.fontSize = '9px'; t.style.color = filter === k ? PAL.amber : PAL.dim;
+      t.textContent = l; t.style.fontFamily = 'Mochiy Pop One, sans-serif'; t.style.fontSize = '9px'; t.style.color = filter === k ? PAL.amber : PAL.dim;
       t.addEventListener('click', () => { filter = k; Z.audio.sfx.hover(); buildFilters(); relayout(); });
       host.appendChild(t);
     });

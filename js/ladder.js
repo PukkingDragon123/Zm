@@ -17,8 +17,8 @@ Z.ladder = (function () {
       const mid = U.el('div', 'opp-mid');
       mid.innerHTML = `<div class="opp-tier">TIER ${en.tier}${en.isChampion ? ' · CHAMP' : ''}${beaten ? ' · BEAT' : ''}</div><div class="opp-name" style="${en.isChampion ? '' : 'color:' + en.color}">${en.name}</div><div class="opp-bio">${locked ? 'Climb the ranks to challenge.' : en.bio}</div>`;
       row.appendChild(mid);
-      const right = U.el('div', 'opp-right'); right.innerHTML = `<div class="opp-purse">$${U.fmt(en.purse)}</div><div class="opp-arch">${en.archetype}</div>`; row.appendChild(right);
-      row.addEventListener('click', () => { if (locked) { Z.audio.sfx.error(); Z.ui.toast('Locked — win more first', 'warn'); } else fight(en); });
+      const right = U.el('div', 'opp-right'); right.innerHTML = `<div class="opp-purse">¥${U.fmt(en.purse)}</div><div class="opp-arch">${en.archetype}</div>`; row.appendChild(right);
+      row.addEventListener('click', () => { if (locked) { Z.audio.sfx.error(); Z.ui.toast('Locked — earn more rank first', 'warn'); } else fight(en); });
       host.appendChild(row);
       Z.render.drawBotPreview(port, Z.Bot.fromEnemy(en), 0, { facing: -1 });
     });

@@ -3,11 +3,7 @@
    ================================================================ */
 Z.ramen = (function () {
   const U = Z.util, $ = U.$, D = Z.data;
-  const LINES = [
-    'Ol\' Boy: "Eat up, kid. The Pit don\'t care if you\'re hungry."',
-    'Ol\' Boy: "Best broth on the block. Grid\'s down, flavor ain\'t."',
-    'Ol\' Boy: "You fight better full. Trust an old man."',
-  ];
+  const LINES = () => (D.AO_LINES && D.AO_LINES.length ? D.AO_LINES.map((l) => '<b>Ao:</b> "' + l + '"') : ['<b>Ao:</b> "Eat first. Fight after."']);
 
   function buy(dish) {
     if (Z.state.buff && Z.state.buff.id === dish.id) { Z.ui.toast('Already got that in you', 'warn'); return; }
@@ -18,7 +14,7 @@ Z.ramen = (function () {
   }
 
   function render() {
-    const npc = $('#ramenNpc'); if (npc) npc.innerHTML = U.choice(LINES) + (Z.state.buff ? `<br><b>Active: ${Z.state.buff.name}</b> (until your next fight)` : '');
+    const npc = $('#ramenNpc'); if (npc) npc.innerHTML = U.choice(LINES()) + (Z.state.buff ? `<br><b>Belly full: ${Z.state.buff.name}</b> (until your next scrap)` : '');
     const host = $('#ramenList'); if (!host) return; U.clear(host);
     D.RAMEN.forEach((dish) => {
       const active = Z.state.buff && Z.state.buff.id === dish.id;
@@ -26,7 +22,7 @@ Z.ramen = (function () {
       const hp = Math.round((dish.hpMul - 1) * 100), pw = Math.round((dish.powMul - 1) * 100);
       card.innerHTML = `<h3>${dish.name}</h3><p>${dish.desc}</p>
         <div class="d-foot"><span class="q-rew">+${hp}% HP${pw ? ' · +' + pw + '% PWR' : ''}</span>
-        <span class="d-price">$${dish.price}</span></div>`;
+        <span class="d-price">¥${dish.price}</span></div>`;
       const b = U.el('button', 'pbtn tiny', active ? 'READY' : 'EAT'); b.style.marginTop = '10px'; b.disabled = active || Z.state.credits < dish.price;
       b.addEventListener('click', () => buy(dish));
       card.appendChild(b);

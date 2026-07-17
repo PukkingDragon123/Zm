@@ -7,11 +7,12 @@ Z.data = (function () {
 
   // Unified palette used by the canvas renderer (kept in sync with CSS vars).
   const PAL = {
-    bg: '#100d0a', bg2: '#1a1611',
-    neonA: '#e8a33d', neonB: '#a6552f', neonC: '#5f8f83',
-    purple: '#7a5a3a', warn: '#c23b2f', gold: '#d9a441',
-    metal: '#8a8577', ink: '#e6ddcd', dim: '#9b8f79',
-    amber: '#e8a33d', rust: '#a6552f', teal: '#5f8f83', red: '#c23b2f', steel: '#8a8577', concrete: '#3a3630',
+    bg: '#20180f', bg2: '#2c2214',
+    neonA: '#d9a441', neonB: '#d94f30', neonC: '#7f9e6a',
+    purple: '#8f63b8', warn: '#c23b2f', gold: '#d9a441',
+    metal: '#8a8577', ink: '#f5ecd7', dim: '#c9b795',
+    amber: '#d9a441', rust: '#a6552f', teal: '#4fae9c', red: '#c23b2f', steel: '#8a8577',
+    paper: '#f5ecd7', verm: '#d94f30', spirit: '#4fae9c', indigo: '#41607a', sumi: '#2f2418',
   };
 
   const RARITY = {
@@ -199,35 +200,44 @@ Z.data = (function () {
     audioBrief: 'Dark synthwave soaked in rain and rust; 88 BPM in the garage, 124 BPM adrenal combat.',
   };
 
-  // ---------------- overworld (the strip) ----------------
-  // x = world position along the side-scrolling street.
-  const STREET_LEN = 4200;
+  // ---------------- overworld (spirit town main street) ----------------
+  const STREET_LEN = 4600;
   const BUILDINGS = [
-    { id: 'house',   x: 520,  w: 300, asset: 'bld.house',   label: 'HOME',        screen: 'workbench', sign: 'HOME · BENCH' },
-    { id: 'toyshop', x: 1200, w: 320, asset: 'bld.toyshop', label: "TANAKA'S",    screen: 'shop',      sign: 'TOY & SCRAP' },
-    { id: 'ramen',   x: 1900, w: 300, asset: 'bld.ramen',   label: 'RAMEN',       screen: 'ramen',     sign: "OL' BOY RAMEN" },
-    { id: 'board',   x: 2520, w: 200, asset: 'bld.board',   label: 'JOBS',        screen: 'quests',    sign: 'JOB BOARD' },
-    { id: 'scrap',   x: 3150, w: 320, asset: 'bld.scrap',   label: 'SCRAP ALLEY', screen: 'scavenge',  sign: 'SCRAP ALLEY' },
-    { id: 'arena',   x: 3850, w: 360, asset: 'bld.arena',   label: 'THE PIT',     screen: 'ladder',    sign: 'THE PIT' },
+    { id: 'house',   x: 520,  w: 300, label: 'DEN',      screen: 'workbench', sign: 'YOUR DEN' },
+    { id: 'toyshop', x: 1180, w: 320, label: 'CURIO',    screen: 'shop',      sign: 'KITSUNE CURIOS' },
+    { id: 'ramen',   x: 1860, w: 300, label: 'RAMEN',    screen: 'ramen',     sign: "AO'S RAMEN" },
+    { id: 'tea',     x: 2420, w: 280, label: 'TEAHOUSE', screen: 'crew',      sign: 'THE TEAHOUSE' },
+    { id: 'board',   x: 2980, w: 200, label: 'REQUESTS', screen: 'quests',    sign: 'REQUEST BOARD' },
+    { id: 'scrap',   x: 3480, w: 320, label: 'GROVE',    screen: 'scavenge',  sign: 'JUNK GROVE' },
+    { id: 'arena',   x: 4160, w: 360, label: 'DOHYO',    screen: 'ladder',    sign: 'THE DOHYO' },
   ];
+  // street NPC positions; lines merged from generated copy below
   const NPCS = [
-    { id: 'n1', x: 300,  asset: 'npc.b', line: 'Equivalent exchange, kid — you only get out what you weld in.' },
-    { id: 'n2', x: 900,  asset: 'npc.a', line: 'You building a scrapper? The Pit eats rookies for breakfast.' },
-    { id: 'n3', x: 1420, asset: 'npc.c', line: 'That alchemy glow when a bot skills? Gives me chills every time.' },
-    { id: 'n4', x: 1650, asset: 'npc.b', line: 'Tanaka gets the good junk on Tuesdays. Rest is rust.' },
-    { id: 'n5', x: 2120, asset: 'npc.a', line: 'Old Tanaka lost an arm to a spinner. Automail now. Respect the Pit.' },
-    { id: 'n6', x: 2760, asset: 'npc.c', line: 'Draw the circle right and the scrap obeys. Draw it wrong... boom.' },
-    { id: 'n7', x: 2900, asset: 'npc.b', line: 'Dig the alley if you want parts free — mind the live wires.' },
-    { id: 'n8', x: 3320, asset: 'npc.a', line: 'Nothing out here is free. To gain something, you gotta give something.' },
-    { id: 'n9', x: 3600, asset: 'npc.c', line: 'Apex-Zero ain’t never lost. You won’t be the first, kid.' },
-    { id: 'n10', x: 4050, asset: 'npc.b', line: 'Win the Pit and the whole block chants your name. Go on. Transmute.' },
+    { id: 'n1', x: 300 }, { id: 'n2', x: 880 }, { id: 'n3', x: 1420 }, { id: 'n4', x: 1660 },
+    { id: 'n5', x: 2160 }, { id: 'n6', x: 2700 }, { id: 'n7', x: 3200 }, { id: 'n8', x: 3720 },
+    { id: 'n9', x: 3980 }, { id: 'n10', x: 4420 },
   ];
-  // ramen buffs the NEXT fight (no persistent HP model — food = pre-fight prep)
+  // snack buffs for the NEXT fight (merged from generated copy below)
   const RAMEN = [
-    { id: 'cup',    name: 'Cheap Cup',    price: 20,  hpMul: 1.08, powMul: 1.0,  desc: 'Instant noodles. A little armor in your belly before the Pit.' },
-    { id: 'pork',   name: 'Pork Bowl',    price: 60,  hpMul: 1.16, powMul: 1.06, desc: 'Ol’ Boy’s house bowl — steadies the hands and the hull.' },
-    { id: 'deluxe', name: 'Deluxe Ramen', price: 150, hpMul: 1.28, powMul: 1.12, desc: 'The works. Fight on a full tank; hit like you mean it.' },
+    { id: 'cup', name: 'Cup Noodles', price: 20, hpMul: 1.08, powMul: 1.0, desc: 'Hot and fast.' },
   ];
+
+  // ---------------- merge generated yokai theme content ----------------
+  const C = window.Z && Z.content ? Z.content : null;
+  let CREW = [], MISSIONS = [], DISTRICTS = [], AO_LINES = [], BOOT_LINES = [], LORE = '';
+  if (C) {
+    const pm = {}; C.retheme.parts.forEach((p) => (pm[p.id] = p));
+    parts.forEach((p) => { const n = pm[p.id]; if (n) { p.name = n.name; p.desc = n.desc; } });
+    const cm = {}; C.retheme.chassis.forEach((c) => (cm[c.id] = c));
+    chassis.forEach((c) => { const n = cm[c.id]; if (n) { c.name = n.name; c.desc = n.desc; } });
+    const em = {}; C.enemies.enemies.forEach((e) => (em[e.id] = e));
+    enemies.forEach((e) => { const n = em[e.id]; if (n) { e.name = n.name; e.taunt = n.taunt; e.defeatLine = n.defeatLine; e.bio = n.bio; } });
+    C.copy.ranks.forEach((r) => { const rk = ranks.find((x) => x.tier === r.tier); if (rk) { rk.name = r.name; rk.flavor = r.flavor; } });
+    RAMEN.length = 0; C.copy.snacks.forEach((s) => RAMEN.push(s));
+    NPCS.forEach((n, i) => { n.line = C.copy.npcLines[i % C.copy.npcLines.length]; });
+    CREW = C.crew.crew; MISSIONS = C.missions.missions; DISTRICTS = C.missions.districts;
+    AO_LINES = C.copy.aoLines; BOOT_LINES = C.copy.bootLines; LORE = C.copy.lore;
+  }
 
   // ---------------- lookups ----------------
   const _partMap = {}; parts.forEach((p) => (_partMap[p.id] = p));
@@ -261,6 +271,10 @@ Z.data = (function () {
     PAL, RARITY, CAT_ICON, WPN_ICON, WPN_LABEL,
     chassis, parts, enemies, ranks, quests, style, START,
     BUILDINGS, NPCS, RAMEN, STREET_LEN,
+    CREW, MISSIONS, DISTRICTS, AO_LINES, BOOT_LINES, LORE,
+    crewById(id) { return CREW.find((c) => c.id === id) || null; },
+    missionById(id) { return MISSIONS.find((m) => m.id === id) || null; },
+    districtById(id) { return DISTRICTS.find((d) => d.id === id) || null; },
     partById, chassisById, enemyById, itemById, rarityColor, rarityRank,
   };
 })();

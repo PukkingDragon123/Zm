@@ -33,6 +33,9 @@ Z.save = (function () {
         tutorialSeen: state.tutorialSeen,
         scavengeCost: state.scavengeCost,
         buff: state.buff,
+        friend: state.friend,
+        missionsDone: state.missionsDone,
+        restored: state.restored,
       };
       localStorage.setItem(KEY, JSON.stringify(snapshot));
       return true;

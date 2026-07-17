@@ -55,11 +55,11 @@ Z.fx = (function () {
   function popText(x, y, text, color) { dmgNums.push({ x, y, vy: -42, life: 1.1, max: 1.1, text, color, big: true }); }
 
   // ---- FMA alchemy VFX + effect text ----
-  function transmute(x, y, r, color, dur) { circles.push({ x, y, r: r || 60, rot: U.rand(0, U.TAU), life: dur || 0.75, max: dur || 0.75, color: color || '#7fd4ff' }); }
+  function transmute(x, y, r, color, dur) { circles.push({ x, y, r: r || 60, rot: U.rand(0, U.TAU), life: dur || 0.75, max: dur || 0.75, color: color || '#ffd98a' }); }
   function lightning(x1, y1, x2, y2, color) {
     const seg = 8, pts = [];
     for (let i = 0; i <= seg; i++) pts.push({ x: U.lerp(x1, x2, i / seg) + (i && i < seg ? U.rand(-14, 14) : 0), y: U.lerp(y1, y2, i / seg) + (i && i < seg ? U.rand(-14, 14) : 0) });
-    arcs.push({ pts, life: 0.16, max: 0.16, color: color || '#bfe9ff' });
+    arcs.push({ pts, life: 0.16, max: 0.16, color: color || '#8fe6cf' });
   }
   function speedLines(dur, color) { speedT = speedDur = dur || 0.24; speedColor = color || '#cfeaff'; }
   function zoom(amt, dur) { zoomAmt = amt || 0.06; zoomDur = zoomT = dur || 0.28; }
@@ -67,15 +67,27 @@ Z.fx = (function () {
   function impact(x, y, color) { screenFlash(0.55, '#ffffff'); speedLines(0.22, color || '#ffffff'); zoom(0.08, 0.26); if (x != null) ring(x, y, color || '#ffffff', 8, 100, 0.3); }
   function bigText(text, opts) {
     opts = opts || {};
-    texts.push({ text, color: opts.color || '#e8a33d', size: opts.size || 40, dur: opts.dur || 1.1, life: opts.dur || 1.1, ring: !!opts.ring, ringColor: opts.ringColor || '#7fd4ff', y: opts.y != null ? opts.y : 0.4, sub: opts.sub || null, rot: 0 });
+    texts.push({ text, color: opts.color || '#e8a33d', size: opts.size || 40, dur: opts.dur || 1.1, life: opts.dur || 1.1, ring: !!opts.ring, ringColor: opts.ringColor || '#ffd98a', y: opts.y != null ? opts.y : 0.4, sub: opts.sub || null, rot: 0 });
   }
 
+  // spirit circle: concentric rings + tomoe swirls + rune ticks (onmyoji style)
   function drawAlchemy(ctx, x, y, r, color, rot, alpha) {
-    ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = alpha; ctx.strokeStyle = color; ctx.lineWidth = 2;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = alpha; ctx.strokeStyle = color; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.arc(0, 0, r, 0, U.TAU); ctx.stroke();
-    ctx.beginPath(); ctx.arc(0, 0, r * 0.82, 0, U.TAU); ctx.stroke();
-    for (let s = 0; s < 2; s++) { ctx.beginPath(); for (let i = 0; i < 3; i++) { const a = s * Math.PI + i / 3 * U.TAU - Math.PI / 2; const px = Math.cos(a) * r * 0.8, py = Math.sin(a) * r * 0.8; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.closePath(); ctx.stroke(); }
-    for (let i = 0; i < 12; i++) { const a = i / 12 * U.TAU; ctx.beginPath(); ctx.moveTo(Math.cos(a) * r * 0.82, Math.sin(a) * r * 0.82); ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); ctx.stroke(); }
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.78, 0, U.TAU); ctx.stroke();
+    // three tomoe (comma swirls)
+    for (let i = 0; i < 3; i++) {
+      const a = i / 3 * U.TAU;
+      const cx = Math.cos(a) * r * 0.42, cy = Math.sin(a) * r * 0.42;
+      ctx.beginPath(); ctx.arc(cx, cy, r * 0.16, a, a + Math.PI * 1.35); ctx.stroke();
+      ctx.fillStyle = color; ctx.beginPath(); ctx.arc(cx + Math.cos(a) * r * 0.05, cy + Math.sin(a) * r * 0.05, r * 0.055, 0, U.TAU); ctx.fill();
+    }
+    // rune ticks between rings
+    for (let i = 0; i < 8; i++) {
+      const a = i / 8 * U.TAU + 0.2;
+      ctx.beginPath(); ctx.moveTo(Math.cos(a) * r * 0.82, Math.sin(a) * r * 0.82); ctx.lineTo(Math.cos(a) * r * 0.95, Math.sin(a) * r * 0.95); ctx.stroke();
+      if (i % 2) { ctx.beginPath(); ctx.arc(Math.cos(a + 0.25) * r * 0.885, Math.sin(a + 0.25) * r * 0.885, r * 0.03, 0, U.TAU); ctx.stroke(); }
+    }
     ctx.restore();
   }
 
@@ -189,7 +201,7 @@ Z.fx = (function () {
       const pop = d.big ? (1 + (1 - a) * 0.0) : 1;
       const size = (d.big ? 20 : 13) * (a > 0.85 ? 1.25 : 1);
       ctx.globalAlpha = a;
-      ctx.font = `${size}px "Press Start 2P", monospace`;
+      ctx.font = `${size}px "Mochiy Pop One", sans-serif`;
       ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.85)';
       ctx.fillStyle = d.color;
       const txt = d.text != null ? d.text : ('-' + d.val);
@@ -214,12 +226,12 @@ Z.fx = (function () {
       ctx.save(); ctx.translate(cx, cy); ctx.globalAlpha = U.clamp(alpha, 0, 1);
       if (tx.ring) drawAlchemy(ctx, 0, 0, tx.size * 2.4 * scale, tx.ringColor, p * 3, U.clamp(alpha, 0, 1) * 0.9);
       ctx.scale(scale, scale);
-      ctx.font = `${tx.size}px "Press Start 2P", monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `${tx.size}px "Mochiy Pop One", sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.lineWidth = 6; ctx.strokeStyle = '#000'; ctx.strokeText(tx.text, 0, 0);
       ctx.fillStyle = tx.color; ctx.fillText(tx.text, 0, 0);
       const hw = tx.text.length * tx.size * 0.34;
       ctx.strokeStyle = U.rgba(tx.ringColor, 0.85); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-hw, tx.size * 0.72); ctx.lineTo(hw, tx.size * 0.72); ctx.stroke();
-      if (tx.sub) { ctx.font = `${tx.size * 0.36}px "Press Start 2P", monospace`; ctx.lineWidth = 4; ctx.strokeStyle = '#000'; ctx.fillStyle = '#e6ddcd'; ctx.strokeText(tx.sub, 0, tx.size * 1.15); ctx.fillText(tx.sub, 0, tx.size * 1.15); }
+      if (tx.sub) { ctx.font = `${tx.size * 0.36}px "Mochiy Pop One", sans-serif`; ctx.lineWidth = 4; ctx.strokeStyle = '#000'; ctx.fillStyle = '#e6ddcd'; ctx.strokeText(tx.sub, 0, tx.size * 1.15); ctx.fillText(tx.sub, 0, tx.size * 1.15); }
       ctx.restore();
     }
     ctx.globalAlpha = 1;

@@ -24,9 +24,10 @@ Z.ui = (function () {
     updateWallet();
   }
   const TITLES = {
-    world: ['BLOCK 7', 'the strip'], workbench: ['THE BENCH', 'home'], shop: ["TANAKA'S", 'toy & scrap'],
-    ramen: ["OL' BOY RAMEN", 'a hot bowl'], scavenge: ['SCRAP ALLEY', 'push your luck'],
-    quests: ['THE JOB BOARD', 'work for cash'], ladder: ['THE PIT', 'pick a scrap'],
+    world: ['SPIRIT TOWN', 'main street'], workbench: ['YOUR DEN', 'the puppet bench'], shop: ['KITSUNE CURIOS', 'parts and charms'],
+    ramen: ["AO'S RAMEN", 'eat first, fight after'], scavenge: ['JUNK GROVE', 'push your luck'],
+    quests: ['REQUEST BOARD', 'help the town'], ladder: ['THE DOHYO', 'challenge matches'],
+    crew: ['THE TEAHOUSE', 'your crew'],
   };
   let lastTitle = null;
   function transition(name) {
@@ -46,7 +47,7 @@ Z.ui = (function () {
 
   function updateWallet() {
     const m = U.fmt(Z.state.credits);
-    ['worldMoney', 'shopMoney', 'ramenMoney', 'qMoney', 'ladMoney'].forEach((id) => { const e = document.getElementById(id); if (e) e.textContent = m; });
+    ['worldMoney', 'shopMoney', 'ramenMoney', 'qMoney', 'ladMoney', 'crewMoney'].forEach((id) => { const e = document.getElementById(id); if (e) e.textContent = m; });
   }
 
   function toast(msg, type) { const w = $('#toasts'); if (!w) return; const t = U.el('div', 'toast' + (type ? ' ' + type : ''), msg); w.appendChild(t); setTimeout(() => t.remove(), 2600); }
@@ -80,11 +81,12 @@ Z.ui = (function () {
 
   function fillHow() {
     const items = [
-      ['THE STRIP', 'Walk the street with A / D (or the < > pad). Stop at a shop and press W / ENTER to go in.'],
-      ['YOUR BENCH', 'At HOME, drag junk parts onto your bot with the wrench. Balance weight, power and the energy budget.'],
-      ['THE PIT', 'Side-view brawls. Move in, HIT to attack, SKILL for a heavy special, hold BLK to guard. Drop their HP to zero.'],
-      ['SCRAP & CASH', 'Dig Scrap Alley for free parts, sell spares at Tanaka\'s, and slurp ramen for a pre-fight edge.'],
-      ['CLIMB', 'Win purse and rank, clear jobs, and work up to dethrone Apex-Zero — king of the block.'],
+      ['SPIRIT TOWN', 'Walk main street with A / D. Press W / ENTER at a doorway to go in. Talk to the townsfolk yokai.'],
+      ['YOUR DEN', 'Drag wood, charms and rune stones onto your puppet. Rune stones set your spirit budget — overdraw and the whole puppet sputters.'],
+      ['THE DOHYO', 'Puppet duels: HIT to swing, JUMP to hop over trouble, SKILL for a spirit burst, hold BLOCK to raise a ward. Break their puppet before yours breaks.'],
+      ['REQUESTS', 'KANE-CO robots are squatting all over town. Take requests with a crew partner, clear the waves, and restore each district.'],
+      ['YOUR CREW', 'Visit the teahouse to talk with Tengu, Kappa and Oni. Friendship ranks make their battle support stronger.'],
+      ['EAT WELL', 'Ao\'s snacks buff your next fight. Junk Grove digs pay in free parts — mind the hazards.'],
     ];
     const g = $('#howGrid'); if (!g) return; U.clear(g);
     items.forEach(([t, d]) => { const it = U.el('div', 'how-item'); it.innerHTML = `<h3>${t}</h3><p>${d}</p>`; g.appendChild(it); });
