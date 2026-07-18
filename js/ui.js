@@ -7,7 +7,7 @@ Z.ui = (function () {
   let current = 'boot';
   let returnScreen = 'world';
   const enterHooks = {}, ACTIONS = {};
-  const SCREENS = ['boot', 'title', 'world', 'workbench', 'shop', 'ramen', 'quests', 'crew', 'scavenge', 'ladder', 'battle', 'result', 'settings', 'how', 'infil'];
+  const SCREENS = ['boot', 'title', 'world', 'menu', 'house', 'cave', 'workbench', 'shop', 'ramen', 'quests', 'crew', 'scavenge', 'ladder', 'battle', 'result', 'settings', 'how', 'infil'];
   const screenEl = (n) => document.querySelector(`.screen[data-screen="${n}"]`);
 
   function show(name) {
@@ -18,7 +18,7 @@ Z.ui = (function () {
     screenEl(name).classList.add('active');
     transition(name);
     // controller mode
-    if (Z.controls) Z.controls.setMode(name === 'world' || name === 'shop' ? 'world' : name === 'battle' ? 'battle' : 'none');
+    if (Z.controls) Z.controls.setMode((name === 'world' || name === 'shop' || name === 'house' || name === 'cave') ? 'world' : name === 'battle' ? 'battle' : 'none');
     if (Z.audio) Z.audio.setMode(name === 'battle' ? 'combat' : 'menu');
     (enterHooks[name] || []).forEach((fn) => { try { fn(); } catch (e) { console.error(e); } });
     updateWallet();
@@ -30,6 +30,8 @@ Z.ui = (function () {
     quests: ['REQUEST BOARD', 'help the town'], ladder: ['THE DOHYO', 'challenge matches'],
     crew: ['THE TEAHOUSE', 'your crew'],
     infil: ['KANE-CO CAMPS', 'sneak in, take back parts'],
+    menu: ['NAVIGATOR', 'where to next'], house: ['HOME', 'your place'],
+    cave: ['WORKSHOP CAVE', 'kits and components'],
   };
   let lastTitle = null;
   function transition(name) {

@@ -23,9 +23,11 @@ Z.data = (function () {
     legendary: { i: 4, color: '#ffcf4d', label: 'LEGENDARY' },
   };
 
-  const CAT_ICON = { chassis: 'FRM', generator: 'GEN', motor: 'MOT', wheels: 'WHL', weapon: 'WPN', armor: 'ARM', utility: 'UTL' };
-  const WPN_ICON = { spinner: 'SPN', hammer: 'HMR', flipper: 'FLP', blade: 'BLD', flamer: 'FLM', none: '-' };
-  const WPN_LABEL = { spinner: 'SPINNER', hammer: 'HAMMER', flipper: 'FLIPPER', blade: 'BLADE', flamer: 'FLAMER', none: 'UNARMED' };
+  // Small-gunpla mech parts. Categories keep their code ids; labels are mech terms.
+  const CAT_ICON = { chassis: 'FRAME', generator: 'CORE', motor: 'SERVO', wheels: 'LEGS', weapon: 'ARMS', armor: 'PLATE', utility: 'MOD' };
+  const CAT_LABEL = { chassis: 'FRAME', generator: 'REACTOR', motor: 'SERVO', wheels: 'LEGS', weapon: 'WEAPON', armor: 'ARMOR', utility: 'BACKPACK' };
+  const WPN_ICON = { spinner: 'GAT', hammer: 'MAUL', flipper: 'SHLD', blade: 'SABER', flamer: 'BEAM', none: '-' };
+  const WPN_LABEL = { spinner: 'GATLING', hammer: 'HEAT MAUL', flipper: 'SHIELD', blade: 'BEAM SABER', flamer: 'BEAM CANNON', none: 'UNARMED' };
 
   // ---------------- CHASSIS ----------------
   const chassis = [
@@ -201,16 +203,22 @@ Z.data = (function () {
   };
 
   // ---------------- overworld (spirit town main street) ----------------
-  const STREET_LEN = 4600;
-  // The street art IS the buildings — each entry is just a doorway you can enter.
+  // Town hub is a short crossroad, not an endless street. Only THREE places:
+  // your home (build), the ramen shop, and the workshop-cave outside town.
+  // Battles + camp infiltrations are launched from the Persona MENU instead.
+  const STREET_LEN = 2200;
+  const CROSSROAD_X = 1900;                                 // walk here to open the map/menu
   const BUILDINGS = [
-    { id: 'camp',    x: 220,  w: 220, label: 'CAMPS',    screen: 'infil',     sign: 'KANE-CO CAMPS' },
-    { id: 'house',   x: 700,  w: 300, label: 'DEN',      screen: 'workbench', sign: 'YOUR DEN' },
-    { id: 'toyshop', x: 1340, w: 320, label: 'CURIO',    screen: 'shop',      sign: 'KITSUNE CURIOS' },
-    { id: 'ramen',   x: 1980, w: 300, label: 'RAMEN',    screen: 'ramen',     sign: "AO'S RAMEN" },
-    { id: 'board',   x: 2620, w: 200, label: 'REQUESTS', screen: 'quests',    sign: 'REQUEST BOARD' },
-    { id: 'scrap',   x: 3300, w: 320, label: 'GROVE',    screen: 'scavenge',  sign: 'JUNK GROVE' },
-    { id: 'arena',   x: 4080, w: 360, label: 'DOHYO',    screen: 'ladder',    sign: 'THE DOHYO' },
+    { id: 'house',  x: 520,  w: 320, label: 'HOME',     screen: 'house',  sign: 'HOME' },
+    { id: 'ramen',  x: 1080, w: 300, label: 'RAMEN',    screen: 'ramen',  sign: "AO'S RAMEN" },
+    { id: 'cave',   x: 1560, w: 320, label: 'WORKSHOP', screen: 'cave',   sign: 'WORKSHOP CAVE' },
+  ];
+  // Persona-menu areas: each launches a battle ladder or a parkour obby.
+  const AREAS = [
+    { id: 'dohyo',  name: 'The Dohyo',      kind: 'battle', screen: 'ladder', sub: 'ranked mech duels', mx: 0.30, my: 0.42 },
+    { id: 'camps',  name: 'KANE-CO Camps',  kind: 'obby',   screen: 'infil',  sub: 'sneak-in parkour',  mx: 0.62, my: 0.30 },
+    { id: 'grove',  name: 'Junk Grove',     kind: 'scav',   screen: 'scavenge', sub: 'scavenge for parts', mx: 0.78, my: 0.58 },
+    { id: 'board',  name: 'Request Board',  kind: 'quest',  screen: 'quests', sub: 'jobs from the town', mx: 0.45, my: 0.66 },
   ];
   // Townsfolk yokai: they wander a small patch of street, and you can stop
   // and actually talk with them — each answer gets a different reply.
@@ -304,9 +312,9 @@ Z.data = (function () {
   };
 
   return {
-    PAL, RARITY, CAT_ICON, WPN_ICON, WPN_LABEL,
+    PAL, RARITY, CAT_ICON, CAT_LABEL, WPN_ICON, WPN_LABEL,
     chassis, parts, enemies, ranks, quests, style, START,
-    BUILDINGS, NPCS, RAMEN, STREET_LEN,
+    BUILDINGS, AREAS, NPCS, RAMEN, STREET_LEN, CROSSROAD_X,
     CREW, MISSIONS, DISTRICTS, AO_LINES, BOOT_LINES, LORE,
     crewById(id) { return CREW.find((c) => c.id === id) || null; },
     missionById(id) { return MISSIONS.find((m) => m.id === id) || null; },

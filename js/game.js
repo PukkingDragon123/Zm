@@ -37,6 +37,9 @@ Z.game = (function () {
     if (cur === 'world') Z.overworld.frame(dt, clock);
     else if (cur === 'ramen') Z.ramen.frame(dt, clock);
     else if (cur === 'shop') Z.shop.frame(dt, clock);
+    else if (cur === 'house' && Z.house) Z.house.frame(dt, clock);
+    else if (cur === 'cave' && Z.cave) Z.cave.frame(dt, clock);
+    else if (cur === 'menu' && Z.menu) Z.menu.frame(dt, clock);
     else if (cur === 'infil') Z.infil.frame(dt, clock);
     else if (cur === 'battle' && Z.combat.active) Z.combat.render();
     else { Z.render.clear(); Z.render.ambient(clock); }
@@ -52,6 +55,7 @@ Z.game = (function () {
     Z.controls.init();
     Z.ui.init();
     Z.workbench.init(); Z.scavenge.init(); Z.shop.init(); Z.ramen.init(); Z.crew.init(); Z.quests.init(); Z.ladder.init(); Z.infil.init(); Z.overworld.init();
+    if (Z.house) Z.house.init(); if (Z.cave) Z.cave.init(); if (Z.menu) Z.menu.init();
 
     Z.ui.registerAction('play', () => {
       Z.audio.resume(); Z.ui.show('world');
