@@ -107,25 +107,20 @@ Z.menu = (function () {
     return wrap;
   }
 
-  // ---- MAP: stylized area nodes at their mx/my, each opens its screen ----
+  // ---- MAP: responsive grid of area cards (never overlaps; flows on mobile) ----
   function buildMap(body) {
     body.appendChild(header('AREA MAP', 'pick a destination'));
-    const wrap = mk('div', {
-      position: 'relative', width: '100%', height: 'clamp(320px,58vh,540px)',
-      border: '2px dashed rgba(255,247,234,.18)', borderRadius: '16px',
+    const grid = mk('div', {
+      display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: '14px',
+      padding: '16px', borderRadius: '16px',
+      border: '2px dashed rgba(255,247,234,.18)',
       background: 'radial-gradient(120% 120% at 30% 10%, rgba(80,40,120,.22), rgba(0,0,0,.18))',
-      overflow: 'hidden',
     });
     (D.AREAS || []).forEach((a) => {
       const kind = KIND[a.kind] || { c: '#f5ecd7', tag: (a.kind || '').toUpperCase() };
-      const mx = (typeof a.mx === 'number') ? a.mx : 0.5;
-      const my = (typeof a.my === 'number') ? a.my : 0.5;
       const node = mk('div', {
-        position: 'absolute',
-        left: 'calc(7% + ' + (mx * 86) + '%)', top: 'calc(9% + ' + (my * 78) + '%)',
-        transform: 'translate(-50%,-50%)', width: 'min(46%,190px)',
         background: 'rgba(18,12,28,.82)', border: '2px solid ' + kind.c, borderRadius: '13px',
-        padding: '11px 13px', boxShadow: '0 6px 16px rgba(0,0,0,.4)', transition: 'transform .12s, box-shadow .12s',
+        padding: '12px 14px', boxShadow: '0 6px 16px rgba(0,0,0,.4)', transition: 'transform .12s, box-shadow .12s',
       });
       const top = mk('div', { display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '5px' });
       top.appendChild(mk('span', {
@@ -137,12 +132,12 @@ Z.menu = (function () {
       node.appendChild(top);
       node.appendChild(mk('div', { fontFamily: "var(--disp)", fontSize: '14px', color: '#fff7ea', lineHeight: '1.15' }, a.name));
       node.appendChild(mk('div', { fontSize: '11px', color: '#c9b795', marginTop: '3px' }, a.sub || ''));
-      node.addEventListener('pointerenter', () => { node.style.transform = 'translate(-50%,-50%) scale(1.05)'; node.style.boxShadow = '0 10px 22px rgba(0,0,0,.5), 0 0 0 3px ' + U.rgba(kind.c, 0.3); if (Z.audio && Z.audio.ctx) Z.audio.sfx.hover(); });
-      node.addEventListener('pointerleave', () => { node.style.transform = 'translate(-50%,-50%)'; node.style.boxShadow = '0 6px 16px rgba(0,0,0,.4)'; });
+      node.addEventListener('pointerenter', () => { node.style.transform = 'translateY(-3px)'; node.style.boxShadow = '0 10px 22px rgba(0,0,0,.5), 0 0 0 3px ' + U.rgba(kind.c, 0.3); if (Z.audio && Z.audio.ctx) Z.audio.sfx.hover(); });
+      node.addEventListener('pointerleave', () => { node.style.transform = 'none'; node.style.boxShadow = '0 6px 16px rgba(0,0,0,.4)'; });
       click(node, () => { if (a.screen) Z.ui.show(a.screen); });
-      wrap.appendChild(node);
+      grid.appendChild(node);
     });
-    body.appendChild(wrap);
+    body.appendChild(grid);
   }
 
   // ---- MISSIONS: the town's request list (lightweight) ----
