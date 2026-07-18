@@ -22,7 +22,7 @@ Z.workbench = (function () {
   let sprue = { x: 0, y: 0, w: 0, h: 0, barY: 0, pieceY: 0, ps: 60 };
   let openCat = 'weapon', catList = [], page = 0, pages = 1, visN = 6;
   let drag = null, flying = [], snapFx = [];
-  let turnPhase = 0, lampT = 0;
+  let turnPhase = 0, lampT = 0, mScale = 3;
   const icons = new Map();
 
   // ---- build helpers (state behaviour identical to the old bench) ----
@@ -82,28 +82,29 @@ Z.workbench = (function () {
   }
   function spareCount() { let n = 0; catList.forEach((e) => { if (e.avail > 0) n += e.avail; }); return n; }
 
-  function mechScale() { return Math.min(W, H) / 440 + 0.55; }
+  function mechScale() { return mScale; }
 
   // ---- layout (recomputed every frame; fully responsive) ----
+  // The mech OWNS the frame; the sprue/tabs/box are a compact strip along the
+  // bottom, and the mech is sized to fill everything above them.
   function layout() {
     W = Z.render.W; H = Z.render.H;
     px = W * 0.5;
-    groundY = Math.max(H * 0.40, Math.min(H * 0.60, H - 250));
 
-    // parts box, bottom-left corner
-    box.w = U.clamp(W * 0.15, 96, 148); box.h = U.clamp(H * 0.14, 74, 106);
-    box.x = 18; box.y = H - box.h - 16;
+    // parts box, bottom-left corner (trimmed so the big mech reads first)
+    box.w = U.clamp(W * 0.14, 84, 132); box.h = U.clamp(H * 0.11, 60, 92);
+    box.x = 16; box.y = H - box.h - 14;
 
     // sprue piece row lives to the right of the box, along the bottom
-    const fromX = box.x + box.w + 22, toX = W - 22;
-    const ps = W < 620 ? 52 : 60;
-    const gap = 12;
+    const fromX = box.x + box.w + 18, toX = W - 18;
+    const ps = W < 620 ? 46 : 54;
+    const gap = 10;
     visN = U.clamp(((toX - fromX + gap) / (ps + gap)) | 0, 2, 7);
     refreshCatBounds();
-    const pieceY = H - ps - 40;
+    const pieceY = H - ps - 28;
     const rowW = visN * (ps + gap) - gap;
     const rowStart = fromX + Math.max(0, ((toX - fromX) - rowW) / 2);
-    sprue = { x: rowStart - 14, y: pieceY - 14, w: rowW + 28, h: ps + 44, barY: pieceY + ps + 12, pieceY, ps };
+    sprue = { x: rowStart - 12, y: pieceY - 12, w: rowW + 24, h: ps + 40, barY: pieceY + ps + 10, pieceY, ps };
     pieces = [];
     const slice = catList.slice(page * visN, page * visN + visN);
     slice.forEach((en, j) => {
@@ -122,11 +123,15 @@ Z.workbench = (function () {
     tabs = [];
     const availW = W - 36, tg = 6;
     const tw = U.clamp((availW - tg * (CATS.length - 1)) / CATS.length, 42, 74);
-    const th = 26;
+    const th = 24;
     const totalW = CATS.length * tw + tg * (CATS.length - 1);
     const tx0 = (W - totalW) / 2;
-    const ty = sprue.y - th - 16;
+    const ty = sprue.y - th - 12;
     CATS.forEach((cat, i) => tabs.push({ cat, label: LABEL[cat], x: tx0 + i * (tw + tg), y: ty, w: tw, h: th }));
+
+    // mech stands on the turntable just above the strip, sized to fill upward
+    groundY = ty - 8;
+    mScale = U.clamp((groundY - H * 0.045) / 100, 2.4, 5.8);
 
     buildSockets();
   }
@@ -298,22 +303,30 @@ Z.workbench = (function () {
 
   // ================= drawing =================
   function draw(ctx, t) {
-    // --- backdrop: the tool-wall bench, fit-cover, dimmed for the lamp pool ---
+    // --- backdrop: the tool-wall bench, fit-cover, kept clean and readable ---
     if (!Z.assets.cover(ctx, 'world.workbench', 0, 0, W, H, 0.5)) {
       const g = ctx.createLinearGradient(0, 0, 0, H);
       g.addColorStop(0, '#3a2c1c'); g.addColorStop(1, '#241a10'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     }
-    ctx.fillStyle = 'rgba(20,13,7,.5)'; ctx.fillRect(0, 0, W, H);
+    // very light vignette so the mech pops without burying the photo
+    const vy = groundY - H * 0.22;
+    const vg = ctx.createRadialGradient(px, vy, Math.min(W, H) * 0.26, px, vy, Math.max(W, H) * 0.78);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(12,8,4,.34)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+    // soft ground-contact gradient so the mech sits on the bench
+    const gg = ctx.createLinearGradient(0, groundY - 40, 0, H);
+    gg.addColorStop(0, 'rgba(20,13,7,0)'); gg.addColorStop(1, 'rgba(16,10,5,.4)');
+    ctx.fillStyle = gg; ctx.fillRect(0, groundY - 40, W, H - groundY + 40);
 
     // --- hanging desk lamp + warm pool over the turntable ---
-    const ly = Math.max(70, H * 0.12);
-    ctx.strokeStyle = 'rgba(18,11,6,.85)'; ctx.lineWidth = 2.5;
+    const ly = Math.max(60, H * 0.10);
+    ctx.strokeStyle = 'rgba(18,11,6,.7)'; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, ly); ctx.stroke();
     Z.render.paperFill(ctx, () => { ctx.beginPath(); ctx.moveTo(px - 30, ly + 20); ctx.lineTo(px - 12, ly); ctx.lineTo(px + 12, ly); ctx.lineTo(px + 30, ly + 20); ctx.closePath(); }, '#3f2f1c', { cut: 3 });
     ctx.fillStyle = '#ffd98a'; ctx.beginPath(); ctx.arc(px, ly + 22, 5, 0, U.TAU); ctx.fill();
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    const flick = 0.17 + Math.sin(lampT * 2.1) * 0.015;
-    const lg = ctx.createRadialGradient(px, groundY - 60, 24, px, groundY - 60, Math.max(W, H) * 0.46);
+    const flick = 0.15 + Math.sin(lampT * 2.1) * 0.014;
+    const lg = ctx.createRadialGradient(px, groundY - H * 0.16, 24, px, groundY - H * 0.16, Math.max(W, H) * 0.5);
     lg.addColorStop(0, U.rgba('#ffcd82', flick)); lg.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = lg; ctx.fillRect(0, 0, W, H); ctx.restore();
 

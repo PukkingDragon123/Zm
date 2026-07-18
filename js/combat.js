@@ -17,6 +17,7 @@ Z.combat = (function () {
   let mission = null, waveIdx = 0, partner = null;
   let comboN = 0, comboT = 0;
   let finisherFired = false, soul = null;
+  let defeatT = 0;                        // defeat-run timer (canvas loss sequence)
 
   const PROF = {
     spinner: { reach: 34, dmgMul: 0.55, cd: 0.18, kb: 70, active: 0.16, ecost: 2, hitstop: 0.02, shake: 1.4, launch: 0 },
@@ -37,6 +38,13 @@ Z.combat = (function () {
   };
   const primaryWeapon = (spec) => (spec.weapons && spec.weapons[0]) ? spec.weapons[0].type : 'none';
 
+  // Big-and-grounded mech draw scale — sized to the screen (~2.5x the old
+  // 1.5) so the plastic frames fill the arena and read clearly.
+  function mechScale() {
+    const H = Z.render.H || 720, W = Z.render.W || 1280;
+    return U.clamp(Math.min(H / 195, W / 285), 3.1, 4.3);
+  }
+
   function makeFighter(spec, isPlayer) {
     const wtype = primaryWeapon(spec), w = spec.weapons && spec.weapons[0];
     return {
@@ -48,7 +56,7 @@ Z.combat = (function () {
       hp: spec.maxHp, maxHp: spec.maxHp,
       energy: spec.energyMax, energyMax: spec.energyMax, regen: spec.energyRegen,
       moveSpeed: U.clamp(120 + spec.speedStat * 2.3, 120, 460),
-      power: spec.power, armor: spec.armor, halfW: spec.radius * 1.15,
+      power: spec.power, armor: spec.armor, halfW: spec.radius * 1.15 * (mechScale() / 1.9),
       atkCd: 0, atkActive: 0, atkHit: false, atkKind: 'hit', atkAnim: 0,
       atkStep: 0, chainStep: 0, chainT: 0,
       skillCd: 0,
@@ -78,7 +86,7 @@ Z.combat = (function () {
       if (partner.id === 'tengu') P.power = Math.round(P.power * (1 + 0.05 * r));
     }
     phase = 'intro'; t = 0; matchT = 0; introT = 0; endT = 0; result = null;
-    spirits = null; crowdHype = 0; comboN = 0; comboT = 0; finisherFired = false; soul = null;
+    spirits = null; crowdHype = 0; comboN = 0; comboT = 0; finisherFired = false; soul = null; defeatT = 0;
     document.getElementById('bhpNameL').textContent = trunc(playerSpec.name, 12);
     document.getElementById('bhpNameR').textContent = trunc(enemy.name, 14);
     Z.audio.startWhir(); Z.ui.show('battle');
@@ -91,6 +99,7 @@ Z.combat = (function () {
   function layout() {
     const W = Z.render.W, H = Z.render.H;
     stage.groundY = H * 0.8; stage.left = W * 0.15; stage.right = W * 0.85;
+    stage.mscale = mechScale();            // big grounded frames, resize-aware
     if (P.x === 0) { P.x = W * 0.37; E.x = W * 0.63; }
   }
 
@@ -139,7 +148,12 @@ Z.combat = (function () {
       checkEnd();
     } else if (phase === 'end') {
       endT += realDt; integrate(P, dt); integrate(E, dt); cooldowns(P, dt); cooldowns(E, dt);
-      if (endT > 1.6) finish();
+      // on a loss, cut to the canvas defeat-run before the result screen
+      if (result && !result.win && endT > 0.75) { phase = 'defeat'; defeatT = 0; Z.audio.setWhir(0); }
+      else if (endT > 1.6) finish();
+    } else if (phase === 'defeat') {
+      defeatT += realDt;
+      if (defeatT > 2.0) finish();
     } else if (phase === 'wave') {
       endT += realDt; integrate(P, dt); cooldowns(P, dt);
       if (endT > 1.2) nextWave();
@@ -172,7 +186,7 @@ Z.combat = (function () {
     if (!f) return;
     if (f.stun > 0) f.stun -= dt;
     const canMove = f.stun <= 0 && !f.block;
-    if (canMove) f.vx += (f.moveInput * f.moveSpeed - f.vx) * Math.min(1, dt * 12);
+    if (canMove) f.vx += (f.moveInput * f.moveSpeed - f.vx) * Math.min(1, dt * 9);
     f.vx *= 1 / (1 + 6 * dt);
     f.x += f.vx * dt;
     f.anim.moving = canMove && Math.abs(f.moveInput) > 0.1 && f.y <= 0;
@@ -514,23 +528,48 @@ Z.combat = (function () {
   }
 
   // ---------- render ----------
+  // Clean, bright arena photo: fit-cover, only a whisper of top vignette for
+  // HUD legibility and a soft ground-contact gradient so the frames sit.
+  function drawArena(ctx, W, H) {
+    if (!Z.assets.cover(ctx, 'battle.arena', 0, 0, W, H, 0.5)) {
+      const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#4a2c3a'); g.addColorStop(1, '#241713'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    }
+    const tv = ctx.createLinearGradient(0, 0, 0, H * 0.24);
+    tv.addColorStop(0, 'rgba(16,10,8,.22)'); tv.addColorStop(1, 'rgba(16,10,8,0)');
+    ctx.fillStyle = tv; ctx.fillRect(0, 0, W, H * 0.24);
+    const gg = ctx.createLinearGradient(0, stage.groundY - 8, 0, H);
+    gg.addColorStop(0, 'rgba(18,10,6,0)'); gg.addColorStop(1, 'rgba(18,10,6,.28)');
+    ctx.fillStyle = gg; ctx.fillRect(0, stage.groundY - 8, W, H - stage.groundY + 8);
+  }
+
+  // LOSING SCREEN — the pilot tanuki bolts across the arena and flees,
+  // kicking up dust, under a wobbly DEFEATED banner, before the result card.
+  function renderDefeat(ctx, W, H) {
+    const gy = stage.groundY;
+    const startX = W * 0.72;
+    const x = startX - (defeatT * 300 + defeatT * defeatT * 260);   // accelerating flee
+    const w = U.clamp(H * 0.4, 210, 340);
+    const step = Math.sin(defeatT * 18);
+    const bob = Math.abs(step) * 13;                                // hard running bounce
+    if (x > -w && Math.random() < 0.7) Z.fx.dust(x + w * 0.24, gy, 2, '#cbb489');
+    Z.render.drawSprite('char.tanuki', x, gy, { w, bob, squash: step * 0.06, facing: -1, anim: 'walk', animT: defeatT * 2.4, sway: -0.05 + step * 0.02 });
+    Z.fx.render(ctx);
+    const wob = Math.sin(t * 6) * 8, pulse = 50 + Math.sin(t * 9) * 3;
+    Z.render.pxText(ctx, 'DEFEATED...', W * 0.5, H * 0.3 + wob, pulse, PAL.red, 'center');
+    Z.render.pxText(ctx, 'retreat!', W * 0.5, H * 0.3 + wob + pulse * 0.68, 16, '#ffd8c0', 'center');
+    Z.render.drawPetals(t);
+  }
+
   function render() {
     const ctx = Z.render.ctx, W = Z.render.W, H = Z.render.H;
     layout(); if (!spirits) buildSpirits(W, H);
-    // shrine arena backdrop
-    if (!Z.assets.cover(ctx, 'battle.arena', 0, 0, W, H, 0.5)) {
-      const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#3a2030'); g.addColorStop(1, '#1c1210'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    }
-    ctx.fillStyle = 'rgba(28,14,8,.22)'; ctx.fillRect(0, 0, W, H);
-    // spectator spirit wisps
+    drawArena(ctx, W, H);
+    if (phase === 'defeat') { renderDefeat(ctx, W, H); return; }
+    // a few spectator spirit wisps (kept sparse + soft)
     drawSpirits(ctx, W, H);
-    // ground shade so cutouts sit
-    const gg = ctx.createLinearGradient(0, stage.groundY - 14, 0, H);
-    gg.addColorStop(0, 'rgba(20,10,6,0)'); gg.addColorStop(1, 'rgba(20,10,6,.5)');
-    ctx.fillStyle = gg; ctx.fillRect(0, stage.groundY - 14, W, H - stage.groundY + 14);
 
     ctx.save();
-    const sx = Z.state.settings.shake ? Z.fx.shakeX : 0, sy = Z.state.settings.shake ? Z.fx.shakeY : 0;
+    const sx = (Z.state.settings.shake ? Z.fx.shakeX : 0) * 0.68, sy = (Z.state.settings.shake ? Z.fx.shakeY : 0) * 0.68;
     ctx.translate(sx, sy);
     const zz = Z.fx.getZoom(); if (zz !== 1) { ctx.translate(W / 2, H / 2); ctx.scale(zz, zz); ctx.translate(-W / 2, -H / 2); }
 
@@ -540,16 +579,17 @@ Z.combat = (function () {
     // partner cheering behind the player
     if (partner) {
       const bob = Math.abs(Math.sin(t * 3.2)) * (6 + crowdHype * 8);
-      Z.render.drawSprite('char.' + partner.id, stage.left - 130, stage.groundY, { w: 72, bob, squash: Math.sin(t * 6.4) * 0.04, facing: 1 });
+      Z.render.drawSprite('char.' + partner.id, stage.left - 150, stage.groundY, { w: U.clamp(H * 0.14, 96, 150), bob, squash: Math.sin(t * 6.4) * 0.04, facing: 1 });
     }
 
     // dash afterimages
-    [E, P].forEach((f) => { if (f && f.dashT > 0) { const g2 = f.dashT / 0.22; ctx.save(); ctx.globalAlpha = 0.2 * g2; for (let i = 1; i <= 2; i++) { ctx.save(); ctx.translate(-f.facing * i * 20, 0); Z.render.drawBotSide(f.x, stage.groundY - f.y, f.facing, f.spec, f.anim, { scale: 1.5 }); ctx.restore(); } ctx.restore(); } });
-    // puppets
-    if (E) Z.render.drawBotSide(E.x, stage.groundY - E.y, E.facing, E.spec, E.anim, { scale: 1.5, hpFrac: E.hp / E.maxHp, flash: E.hitFlash > 0 ? E.hitFlash / 0.12 * 0.8 : 0 });
-    Z.render.drawBotSide(P.x, stage.groundY - P.y, P.facing, P.spec, P.anim, { scale: 1.5, hpFrac: P.hp / P.maxHp, flash: P.hitFlash > 0 ? P.hitFlash / 0.12 * 0.8 : 0 });
+    const ms = stage.mscale || mechScale();
+    [E, P].forEach((f) => { if (f && f.dashT > 0) { const g2 = f.dashT / 0.22; ctx.save(); ctx.globalAlpha = 0.2 * g2; for (let i = 1; i <= 2; i++) { ctx.save(); ctx.translate(-f.facing * i * 22, 0); Z.render.drawBotSide(f.x, stage.groundY - f.y, f.facing, f.spec, f.anim, { scale: ms }); ctx.restore(); } ctx.restore(); } });
+    // puppets — big, grounded plastic frames
+    if (E) Z.render.drawBotSide(E.x, stage.groundY - E.y, E.facing, E.spec, E.anim, { scale: ms, hpFrac: E.hp / E.maxHp, flash: E.hitFlash > 0 ? E.hitFlash / 0.12 * 0.8 : 0 });
+    Z.render.drawBotSide(P.x, stage.groundY - P.y, P.facing, P.spec, P.anim, { scale: ms, hpFrac: P.hp / P.maxHp, flash: P.hitFlash > 0 ? P.hitFlash / 0.12 * 0.8 : 0 });
     // block wards (ofuda shield arc)
-    [P, E].forEach((f) => { if (f && f.block) { ctx.strokeStyle = U.rgba(SPIRIT, 0.85); ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(f.x + f.facing * f.halfW, stage.groundY - f.y - f.spec.radius * 1.6, f.spec.radius * 1.5, -1.1, 1.1); ctx.stroke(); ctx.fillStyle = U.rgba(SPIRIT, 0.2); ctx.fill(); } });
+    [P, E].forEach((f) => { if (f && f.block) { const r = f.spec.radius * ms; ctx.strokeStyle = U.rgba(SPIRIT, 0.85); ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(f.x + f.facing * f.halfW, stage.groundY - f.y - r * 1.05, r * 0.9, -1.1, 1.1); ctx.stroke(); ctx.fillStyle = U.rgba(SPIRIT, 0.2); ctx.fill(); } });
 
     // released soul rises from a broken puppet
     if (soul) {
@@ -576,12 +616,12 @@ Z.combat = (function () {
 
   function buildSpirits(W, H) {
     spirits = [];
-    for (let i = 0; i < 16; i++) spirits.push({ x: U.rand(0.04, 0.96), y: U.rand(0.3, 0.55), s: U.rand(10, 22), ph: U.rand(0, 6.28), col: U.choice(['#ffd98a', '#8fe6cf', '#f2b8c6', '#cfd8ff']) });
+    for (let i = 0; i < 10; i++) spirits.push({ x: U.rand(0.04, 0.96), y: U.rand(0.26, 0.5), s: U.rand(10, 20), ph: U.rand(0, 6.28), col: U.choice(['#ffd98a', '#8fe6cf', '#f2b8c6', '#cfd8ff']) });
   }
   function drawSpirits(ctx, W, H) {
     for (const sp of spirits) {
       const bx = sp.x * W, by = sp.y * H + Math.sin(t * (1.4 + crowdHype) + sp.ph) * (8 + crowdHype * 10);
-      ctx.save(); ctx.globalAlpha = 0.5;
+      ctx.save(); ctx.globalAlpha = 0.4;
       // little hitodama wisp with tail
       const g = ctx.createRadialGradient(bx, by, 1, bx, by, sp.s);
       g.addColorStop(0, sp.col); g.addColorStop(1, 'rgba(0,0,0,0)');
@@ -599,7 +639,7 @@ Z.combat = (function () {
     const bob = Math.abs(Math.sin(t * 2.6)) * 5 + press * 4;
     const key = isPlayer ? 'char.tanuki' : null;
     if (key) {
-      Z.render.drawSprite(key, x, groundY, { w: 104, bob, squash: Math.sin(t * 5.2) * 0.035 + press * 0.05, facing: face, sway: Math.sin(t * 2) * 0.04 });
+      Z.render.drawSprite(key, x, groundY, { w: U.clamp(Z.render.H * 0.2, 128, 196), bob, squash: Math.sin(t * 5.2) * 0.035 + press * 0.05, facing: face, sway: Math.sin(t * 2) * 0.04 });
     } else {
       // KANE-CO handler: grey suit drone hovering with a briefcase
       ctx.save(); ctx.translate(x, groundY - 46 - bob); ctx.scale(face, 1);
@@ -617,11 +657,11 @@ Z.combat = (function () {
     // spirit strings to the puppet (3 wavy glowing threads)
     if (fighter) {
       const hx = x + face * 26, hy = groundY - 64 - bob;
-      const tx = fighter.x, tyTop = groundY - fighter.y - fighter.spec.radius * 3.1;
+      const tx = fighter.x, tyTop = groundY - fighter.y - fighter.spec.radius * (stage.mscale || 3.6) * 1.85;
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
       for (let i = 0; i < 3; i++) {
         const off = (i - 1) * 12, sway = Math.sin(t * 3 + i * 2) * 10;
-        const col = isPlayer ? U.rgba('#8fe6cf', 0.5 - i * 0.1) : U.rgba('#ff9d7a', 0.5 - i * 0.1);
+        const col = isPlayer ? U.rgba('#8fe6cf', 0.34 - i * 0.09) : U.rgba('#ff9d7a', 0.34 - i * 0.09);
         ctx.strokeStyle = col; ctx.lineWidth = 1.6;
         ctx.beginPath(); ctx.moveTo(hx, hy);
         ctx.quadraticCurveTo((hx + tx) / 2 + sway, Math.min(hy, tyTop) - 40 - i * 10, tx + off, tyTop + Math.abs(off) * 0.4);
@@ -630,11 +670,11 @@ Z.combat = (function () {
       }
       // glowing hand node
       const g = ctx.createRadialGradient(hx, hy, 1, hx, hy, 14);
-      g.addColorStop(0, isPlayer ? 'rgba(143,230,207,.8)' : 'rgba(255,157,122,.8)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      g.addColorStop(0, isPlayer ? 'rgba(143,230,207,.5)' : 'rgba(255,157,122,.5)'); g.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g; ctx.fillRect(hx - 14, hy - 14, 28, 28);
       ctx.restore();
     }
-    if (isPlayer) Z.render.pxText(ctx, 'YOU', x, groundY - 136 - bob, 10, '#ffe9bf', 'center');
+    if (isPlayer) Z.render.pxText(ctx, 'YOU', x, groundY - U.clamp(Z.render.H * 0.22, 150, 214) - bob, 11, '#ffe9bf', 'center');
   }
 
   function hud() {

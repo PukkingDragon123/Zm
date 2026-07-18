@@ -306,9 +306,10 @@ Z.render = (function () {
     const chestY = hipY - torsoH;
     const thrust = flying ? 1 : (atk > 0 ? 0.5 : 0.12 + 0.06 * Math.sin(t * 9));   // booster intensity
 
-    // ground shadow (shrinks + fades with altitude)
-    ctx.save(); ctx.globalAlpha = 0.3 * (1 - lift / (40 * s)); ctx.fillStyle = '#12100c';
-    ctx.beginPath(); ctx.ellipse(x, groundY + 3, torsoW * (0.85 - lift / (120 * s)), 5.5 * s, 0, 0, U.TAU); ctx.fill(); ctx.restore();
+    // ground shadow (shrinks + fades with altitude; never a negative radius)
+    ctx.save(); ctx.globalAlpha = Math.max(0, 0.3 * (1 - lift / (40 * s))); ctx.fillStyle = '#12100c';
+    const shR = Math.max(0.5, torsoW * (0.85 - lift / (120 * s)));
+    ctx.beginPath(); ctx.ellipse(x, groundY + 3, shR, 5.5 * s, 0, 0, U.TAU); ctx.fill(); ctx.restore();
 
     ctx.save();
     ctx.translate(x, 0); ctx.scale(facing, 1); ctx.rotate(lean * 0.35);

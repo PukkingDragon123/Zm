@@ -42,39 +42,41 @@ Z.ramen = (function () {
 
     if (phase === 'feast') { drawFeast(ctx, W, H, dt, t); Z.render.drawPetals(t); return; }
 
-    // ---- walk-in: counter interior ----
+    // ---- walk-in: clean counter interior ----
     if (!Z.assets.cover(ctx, 'ramen.inside', 0, 0, W, H, 0.5)) {
       const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#3a2a18'); g.addColorStop(1, '#241a10');
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     }
-    ctx.fillStyle = 'rgba(30,18,8,.24)'; ctx.fillRect(0, 0, W, H);
-    const groundY = H * 0.88, seatX = W * 0.42, stoolH = 46;
+    const groundY = H * 0.9;
+    const tanW = U.clamp(H * 0.34, 180, 300);              // big tanuki (~3x old)
+    const aoW = U.clamp(H * 0.42, 220, 360);               // big Ao behind the counter
+    const stoolH = U.clamp(H * 0.09, 46, 96);
+    const seatX = W * 0.4;
 
-    // warm lamp glow behind the counter
-    ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    const lg = ctx.createRadialGradient(W * 0.6, H * 0.3, 10, W * 0.6, H * 0.3, W * 0.4);
-    lg.addColorStop(0, 'rgba(255,200,120,.14)'); lg.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = lg; ctx.fillRect(0, 0, W, H); ctx.restore();
+    // soft ground-contact shade only — keep the photo bright
+    const gg = ctx.createLinearGradient(0, groundY - H * 0.14, 0, H);
+    gg.addColorStop(0, 'rgba(30,18,8,0)'); gg.addColorStop(1, 'rgba(30,18,8,.4)');
+    ctx.fillStyle = gg; ctx.fillRect(0, groundY - H * 0.14, W, H - groundY + H * 0.14);
 
     // Ao working behind the counter
     const aoBob = Math.abs(Math.sin(t * 2)) * 4;
-    Z.render.drawSprite('char.ao', W * 0.72, groundY - 6, { w: 150, bob: aoBob, squash: Math.sin(t * 4) * 0.03, sway: Math.sin(t * 1.9) * 0.06, facing: -1 });
+    Z.render.drawSprite('char.ao', W * 0.74, groundY - 6, { w: aoW, bob: aoBob, squash: Math.sin(t * 4) * 0.03, sway: Math.sin(t * 1.9) * 0.06, facing: -1 });
 
     // paper stool
-    Z.render.paperFill(ctx, () => { Z.render.roundRect(ctx, seatX - 26, groundY - stoolH, 52, 12, 5); }, '#b0844f', { cut: 3.4 });
-    Z.render.paperFill(ctx, () => { ctx.beginPath(); ctx.rect(seatX - 5, groundY - stoolH + 10, 10, stoolH - 12); }, '#8a6a45', { noShadow: true, cut: 3 });
+    Z.render.paperFill(ctx, () => { Z.render.roundRect(ctx, seatX - 30, groundY - stoolH, 60, 14, 6); }, '#b0844f', { cut: 3.4 });
+    Z.render.paperFill(ctx, () => { ctx.beginPath(); ctx.rect(seatX - 6, groundY - stoolH + 12, 12, stoolH - 14); }, '#8a6a45', { noShadow: true, cut: 3 });
 
     if (!seated) {
-      walkX += dt * 240;
+      walkX += dt * 320;
       const target = seatX - 4;
       if (walkX >= target) { seated = true; walkX = target; Z.audio.sfx.flip(); Z.fx.dust(seatX, groundY - stoolH, 4, '#cbb489'); }
       const wt = t * 9;
-      Z.render.drawSprite('char.tanuki', walkX, groundY, { w: 120, bob: Math.abs(Math.sin(wt)) * 6, squash: Math.cos(wt * 2) * 0.04, facing: 1, anim: 'walk', animT: t });
+      Z.render.drawSprite('char.tanuki', walkX, groundY, { w: tanW, bob: Math.abs(Math.sin(wt)) * (H * 0.016), squash: Math.cos(wt * 2) * 0.04, facing: 1, anim: 'walk', animT: t });
     } else {
       seatT += dt;
       const hop = Math.min(1, seatT * 4);
       const sy = groundY - stoolH * U.ease.outBack(hop);
-      Z.render.drawSprite('char.tanuki', seatX, sy, { w: 116, bob: Math.sin(t * 2.2) * 2.4, squash: Math.sin(t * 2.2) * 0.02, facing: 1, anim: seatT > 0.6 ? 'happy' : 'jump', animT: t });
+      Z.render.drawSprite('char.tanuki', seatX, sy, { w: tanW * 0.96, bob: Math.sin(t * 2.2) * 2.4, squash: Math.sin(t * 2.2) * 0.02, facing: 1, anim: seatT > 0.6 ? 'happy' : 'jump', animT: t });
       // settled on the stool -> cut to the cozy feast + dialogue
       if (seatT > 0.72 && !menuLaunched) { menuLaunched = true; toFeast(); }
     }
@@ -100,10 +102,10 @@ Z.ramen = (function () {
     }
     ctx.restore();
 
-    // top vignette so the dialogue box reads
-    const gg = ctx.createLinearGradient(0, H * 0.5, 0, H);
-    gg.addColorStop(0, 'rgba(24,14,6,0)'); gg.addColorStop(1, 'rgba(24,14,6,.5)');
-    ctx.fillStyle = gg; ctx.fillRect(0, H * 0.5, W, H * 0.5);
+    // soft bottom shade so the dialogue box reads — kept light, photo stays bright
+    const gg = ctx.createLinearGradient(0, H * 0.6, 0, H);
+    gg.addColorStop(0, 'rgba(24,14,6,0)'); gg.addColorStop(1, 'rgba(24,14,6,.34)');
+    ctx.fillStyle = gg; ctx.fillRect(0, H * 0.6, W, H * 0.4);
 
     // curling steam wisps rising off the bowls
     if (steam.length < 22 && Math.random() < 0.5) {
