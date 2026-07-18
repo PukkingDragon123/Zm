@@ -24,7 +24,7 @@ Z.ui = (function () {
     updateWallet();
   }
   const TITLES = {
-    world: ['SPIRIT TOWN', 'main street'], workbench: ['CRAFTING TABLE', 'build your mech'],
+    world: ['CROSSROAD', 'left or right to go'], workbench: ['CRAFTING TABLE', 'build your mech'],
     ramen: ["AO'S RAMEN", 'eat first, fight after'], scavenge: ['JUNK GROVE', 'push your luck'],
     shop: ['KITSUNE CURIOS', 'browse the shelves'],
     quests: ['REQUEST BOARD', 'help the town'], ladder: ['THE DOHYO', 'challenge matches'],
