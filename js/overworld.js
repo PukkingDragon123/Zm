@@ -1,23 +1,33 @@
 /* ================================================================
-   overworld.js — Spirit Town main street. The buildings live in the
-   painted backdrop; we only mark the doors with hanging signs.
-   Yokai townsfolk wander their patch of street and stop to chat —
-   real back-and-forth dialogue with answers. Walk A/D, act with W.
+   overworld.js — Spirit Town HUB. A short crossroad, not an endless
+   street: three doorways (HOME / RAMEN / WORKSHOP CAVE) painted into
+   the backdrop and marked with hanging signs, plus a glowing torii
+   CROSSROAD at the right end that opens the Persona MAP menu.
+   Yokai townsfolk wander their patch and stop to chat (real choices).
+   Walk A/D, act with W. Camera lerps but clamps to the level ends.
    ================================================================ */
 Z.overworld = (function () {
   const U = Z.util, D = Z.data;
   const LEN = D.STREET_LEN;
+  const CROSS = D.CROSSROAD_X;
   const SPEED = 250, NPC_SPEED = 55;
   let kid = { x: 560, vx: 0, facing: 1, walk: 0, turn: 0 };
-  let camX = 0, near = null, nearNpc = null, started = false;
+  let camX = 0, near = null, nearNpc = null, nearCross = false, started = false, snapCam = true;
   let npcs = null;
   const lift = {};   // building id -> eased 0..1 highlight
+  let crossLift = 0; // torii highlight eased 0..1
 
-  function enter() { if (!started) { started = true; kid.x = 560; } buildNpcs(); }
+  function enter() {
+    if (!started) { started = true; kid.x = 560; }
+    snapCam = true;
+    buildNpcs();
+  }
 
   function buildNpcs() {
     if (npcs) return;
-    npcs = D.NPCS.map((n, i) => ({
+    // Only townsfolk who live on the short hub street (past the crossroad
+    // there is no walkable road, so drop anyone who lives out there).
+    npcs = D.NPCS.filter((n) => n.x <= LEN - 40).map((n, i) => ({
       def: n, home: n.x, x: n.x, facing: i % 2 ? -1 : 1,
       state: 'idle', wait: U.rand(1.5, 4), target: n.x, walk: 0, seed: i * 1.7,
     }));
@@ -53,7 +63,6 @@ Z.overworld = (function () {
       kid.vx = dir * SPEED;
       kid.x = U.clamp(kid.x + kid.vx * dt, 30, LEN - 30);
       kid.walk = Math.abs(kid.vx) > 1 ? kid.walk + dt : 0;
-      camX = U.clamp(kid.x - W * 0.5, 0, Math.max(0, LEN - W));
 
       // townsfolk wander: idle -> pick a spot near home -> walk -> idle
       for (const n of npcs) {
@@ -75,20 +84,25 @@ Z.overworld = (function () {
         }
       }
 
-      // interact targets — a nearby yokai wins over a door
+      // interact targets — a nearby yokai wins, then the crossroad, then a door
       nearNpc = null; let bn = 90;
       for (const n of npcs) { const d = Math.abs(kid.x - n.x); if (d < bn) { bn = d; nearNpc = n; } }
-      near = null; let best = 120;
-      for (const b of D.BUILDINGS) { const d = Math.abs(kid.x - (b.x + b.w / 2)); if (d < best) { best = d; near = b; } }
-      if (nearNpc) near = null;
+      nearCross = !nearNpc && kid.x > CROSS - 120;
+      near = null;
+      if (!nearNpc && !nearCross) {
+        let best = 120;
+        for (const b of D.BUILDINGS) { const d = Math.abs(kid.x - (b.x + b.w / 2)); if (d < best) { best = d; near = b; } }
+      }
 
       if (prompt) {
         if (nearNpc) { prompt.textContent = 'TALK — ' + nearNpc.def.name; prompt.classList.add('show'); }
+        else if (nearCross) { prompt.textContent = 'OPEN MAP'; prompt.classList.add('show'); }
         else if (near) { prompt.textContent = 'ENTER — ' + near.sign; prompt.classList.add('show'); }
         else prompt.classList.remove('show');
       }
       if (Z.controls && Z.controls.consumeInteract()) {
         if (nearNpc) talkTo(nearNpc);
+        else if (nearCross) { Z.audio.sfx.click(); Z.ui.show('menu'); return; }
         else if (near) { Z.audio.sfx.click(); Z.ui.show(near.screen); return; }
       }
     } else {
@@ -96,10 +110,17 @@ Z.overworld = (function () {
       if (prompt) prompt.classList.remove('show');
     }
 
+    // camera: lerp toward the clamped follow target (never scroll past the ends)
+    const camTarget = U.clamp(kid.x - W * 0.5, 0, Math.max(0, LEN - W));
+    if (snapCam) { camX = camTarget; snapCam = false; }
+    else camX = U.lerp(camX, camTarget, Math.min(1, dt * 6));
+
     // ---- draw ----
-    // painted street backdrop w/ gentle parallax
+    // painted town backdrop w/ gentle parallax
     const off = 0.5 - (camX / Math.max(1, LEN - W) - 0.5) * 0.14;
-    if (!Z.assets.cover(ctx, 'world.sakura', 0, 0, W, H, off) && !Z.assets.cover(ctx, 'world.street', 0, 0, W, H, off)) {
+    if (!Z.assets.cover(ctx, 'world.townview', 0, 0, W, H, off) &&
+        !Z.assets.cover(ctx, 'world.konbini', 0, 0, W, H, off) &&
+        !Z.assets.cover(ctx, 'world.sakura', 0, 0, W, H, off)) {
       const g = ctx.createLinearGradient(0, 0, 0, H);
       g.addColorStop(0, '#f0b26a'); g.addColorStop(0.55, '#d98d55'); g.addColorStop(1, '#7d5638');
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
@@ -124,6 +145,11 @@ Z.overworld = (function () {
       if (sx < -140 || sx > W + 140) continue;
       drawDoorMarker(ctx, b, sx, groundY, t, lift[b.id]);
     }
+
+    // the CROSSROAD torii at the right end — glowing gate that opens the map
+    crossLift = U.lerp(crossLift, nearCross ? 1 : 0, Math.min(1, dt * 9));
+    const cx = CROSS - camX;
+    if (cx > -160 && cx < W + 160) drawTorii(ctx, cx, groundY, t, crossLift);
 
     // townsfolk yokai (walk spritesheets where available, gentle bob otherwise)
     npcs.forEach((n, i) => {
@@ -154,7 +180,7 @@ Z.overworld = (function () {
     Z.render.drawPetals(t);
   }
 
-  // one clean marker per doorway: hanging wooden sign plank + door glow
+  // one clean marker per doorway: hanging sign plank + door glow
   function drawDoorMarker(ctx, b, sx, groundY, t, hot) {
     const P = (p, f, o) => Z.render.paperFill(ctx, p, f, o);
     // soft warm glow at ground level where the door is
@@ -186,6 +212,59 @@ Z.overworld = (function () {
       ctx.globalAlpha = 1;
     }
     ctx.restore();
+  }
+
+  // the crossroad gate: a vermillion torii that glows and invites the map
+  function drawTorii(ctx, sx, groundY, t, hot) {
+    const verm = hot > 0.5 ? '#e25a39' : '#d94f30';
+    const H = 196, halfBase = 66;
+    const topY = groundY - H;
+
+    // wide glow behind the gate — the town's exit toward the wider world
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const gw = 130 + hot * 60;
+    const gr = ctx.createRadialGradient(sx, groundY - H * 0.5, 6, sx, groundY - H * 0.5, gw);
+    gr.addColorStop(0, 'rgba(255,150,110,' + (0.16 + hot * 0.22).toFixed(3) + ')');
+    gr.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.ellipse(sx, groundY - H * 0.5, gw, gw, 0, 0, U.TAU); ctx.fill();
+    ctx.restore();
+
+    const outline = () => { ctx.lineJoin = 'round'; ctx.lineWidth = 2.4; ctx.strokeStyle = 'rgba(47,36,24,.85)'; ctx.stroke(); };
+    const pillar = (px) => {
+      ctx.beginPath(); Z.render.roundRect(ctx, px - 9, topY + 10, 18, H - 10, 4);
+      ctx.fillStyle = verm; ctx.fill(); outline();
+    };
+    pillar(sx - halfBase); pillar(sx + halfBase);
+
+    // nuki (lower beam)
+    ctx.beginPath(); Z.render.roundRect(ctx, sx - halfBase - 18, topY + 44, (halfBase + 18) * 2, 16, 3);
+    ctx.fillStyle = verm; ctx.fill(); outline();
+
+    // kasagi (top beam) with gently upturned ends
+    ctx.beginPath();
+    ctx.moveTo(sx - halfBase - 40, topY + 12);
+    ctx.quadraticCurveTo(sx, topY - 6, sx + halfBase + 40, topY + 12);
+    ctx.lineTo(sx + halfBase + 40, topY + 26);
+    ctx.quadraticCurveTo(sx, topY + 10, sx - halfBase - 40, topY + 26);
+    ctx.closePath();
+    ctx.fillStyle = verm; ctx.fill(); outline();
+
+    // gakuza plaque with the map glyph
+    ctx.beginPath(); Z.render.roundRect(ctx, sx - 20, topY + 18, 40, 26, 4);
+    ctx.fillStyle = '#2f2418'; ctx.fill();
+    Z.render.pxText(ctx, 'MAP', sx, topY + 36, 10, '#f5ecd7', 'center');
+
+    // bobbing prompt arrow when the player stands at the crossroad
+    if (hot > 0.05) {
+      ctx.save(); ctx.globalAlpha = hot;
+      const ay = topY - 16 - Math.sin(t * 5) * 5;
+      ctx.beginPath();
+      ctx.moveTo(sx - 10, ay); ctx.lineTo(sx + 10, ay); ctx.lineTo(sx + 10, ay + 9);
+      ctx.lineTo(sx, ay + 20); ctx.lineTo(sx - 10, ay + 9); ctx.closePath();
+      ctx.fillStyle = '#ffd98a'; ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(47,36,24,.8)'; ctx.stroke();
+      ctx.restore();
+    }
   }
 
   function drawLanternString(ctx, x, y, t) {

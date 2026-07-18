@@ -1,47 +1,69 @@
 /* ================================================================
-   ramen.js — AO'S RAMEN as a playable scene: you walk in, hop onto
-   a stool at the counter, Ao greets you, then you order.
+   ramen.js — AO'S RAMEN as a playable scene: the tanuki walks in,
+   hops onto a stool at the counter, and the shop turns into a cozy
+   Persona-style dialogue. Ao the yokai takes your order through
+   ANSWER CHOICES (no menu grid) — each bowl is a buff for the next
+   mech duel. The old #ramenNpc/#ramenList DOM stays hidden.
    ================================================================ */
 Z.ramen = (function () {
   const U = Z.util, $ = U.$, D = Z.data;
-  let walkX = 0, seated = false, seatT = 0, entered = false, greetLine = '';
-  const LINES = () => (D.AO_LINES && D.AO_LINES.length ? D.AO_LINES : ['Eat first. Fight after.']);
+  let walkX = 0, seated = false, seatT = 0, entered = false;
+  let phase = 'walkin';                 // 'walkin' | 'feast'
+  let feastT = 0, menuLaunched = false, leaving = false, first = true;
+  let steam = [];
+
+  const AO_LINES = () => (D.AO_LINES && D.AO_LINES.length ? D.AO_LINES : ['Eat first. Fight after.']);
+  const greet = () => U.choice(AO_LINES());
+
+  const ASK_FIRST = [
+    'Sit, sit. Broth is already singing. What will it be, little one?',
+    'Leaf still on your head, good. Hungry paws fight better. Pick a bowl.',
+    'The stool remembers you. Now — what warms the frame tonight?',
+  ];
+  const ASK_MORE = [
+    'Still room under that scarf? Order away.',
+    "Pot's not empty yet. Anything else before the dohyo?",
+    'One more? The steam is free, the noodles are not.',
+  ];
 
   function enter() {
     entered = true; seated = false; seatT = 0; walkX = -80;
-    greetLine = U.choice(LINES());
-    $('#ramenNpc').classList.remove('on');
-    $('#ramenList').classList.remove('on');
-    renderMenu();
+    phase = 'walkin'; feastT = 0; menuLaunched = false; leaving = false; first = true;
+    steam = [];
+    const npc = $('#ramenNpc'), list = $('#ramenList');
+    if (npc) npc.classList.remove('on');
+    if (list) list.classList.remove('on');
   }
 
-  // canvas scene, called from the game loop while on the ramen screen
+  // ---------------- scene / canvas ----------------
   function frame(dt, t) {
     const ctx = Z.render.ctx, W = Z.render.W, H = Z.render.H;
     Z.render.clear();
+
+    if (phase === 'feast') { drawFeast(ctx, W, H, dt, t); Z.render.drawPetals(t); return; }
+
+    // ---- walk-in: counter interior ----
     if (!Z.assets.cover(ctx, 'ramen.inside', 0, 0, W, H, 0.5)) {
       const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#3a2a18'); g.addColorStop(1, '#241a10');
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     }
     ctx.fillStyle = 'rgba(30,18,8,.24)'; ctx.fillRect(0, 0, W, H);
     const groundY = H * 0.88, seatX = W * 0.42, stoolH = 46;
-    // counter-side warm lamp glow
+
+    // warm lamp glow behind the counter
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     const lg = ctx.createRadialGradient(W * 0.6, H * 0.3, 10, W * 0.6, H * 0.3, W * 0.4);
     lg.addColorStop(0, 'rgba(255,200,120,.14)'); lg.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = lg; ctx.fillRect(0, 0, W, H); ctx.restore();
 
-    // Ao sweeping behind the counter (right side)
+    // Ao working behind the counter
     const aoBob = Math.abs(Math.sin(t * 2)) * 4;
     Z.render.drawSprite('char.ao', W * 0.72, groundY - 6, { w: 150, bob: aoBob, squash: Math.sin(t * 4) * 0.03, sway: Math.sin(t * 1.9) * 0.06, facing: -1 });
-    // Ao speech once seated
-    if (seated && seatT > 0.5) speechBubble(ctx, W * 0.72, groundY - 220, greetLine);
 
     // paper stool
     Z.render.paperFill(ctx, () => { Z.render.roundRect(ctx, seatX - 26, groundY - stoolH, 52, 12, 5); }, '#b0844f', { cut: 3.4 });
     Z.render.paperFill(ctx, () => { ctx.beginPath(); ctx.rect(seatX - 5, groundY - stoolH + 10, 10, stoolH - 12); }, '#8a6a45', { noShadow: true, cut: 3 });
 
-    // the tanuki: walk in, hop up, sit
     if (!seated) {
       walkX += dt * 240;
       const target = seatX - 4;
@@ -53,52 +75,156 @@ Z.ramen = (function () {
       const hop = Math.min(1, seatT * 4);
       const sy = groundY - stoolH * U.ease.outBack(hop);
       Z.render.drawSprite('char.tanuki', seatX, sy, { w: 116, bob: Math.sin(t * 2.2) * 2.4, squash: Math.sin(t * 2.2) * 0.02, facing: 1, anim: seatT > 0.6 ? 'happy' : 'jump', animT: t });
-      if (seatT > 0.7 && !$('#ramenNpc').classList.contains('on')) {
-        $('#ramenNpc').classList.add('on'); $('#ramenList').classList.add('on');
-        Z.audio.sfx.coin();
-      }
+      // settled on the stool -> cut to the cozy feast + dialogue
+      if (seatT > 0.72 && !menuLaunched) { menuLaunched = true; toFeast(); }
     }
     Z.render.drawPetals(t);
   }
 
-  function speechBubble(ctx, x, y, text) {
-    const lines = wrap(text, 26), w = 240, h = 18 + lines.length * 19;
-    const bx = Math.min(x, Z.render.W - w / 2 - 10);
-    Z.render.paperFill(ctx, () => Z.render.roundRect(ctx, bx - w / 2, y - h, w, h, 13), '#f5ecd7', { cut: 0.001 });
-    ctx.fillStyle = '#2f2418'; ctx.textAlign = 'center'; ctx.font = "700 16px 'Zen Maru Gothic', sans-serif";
-    lines.forEach((ln, i) => ctx.fillText(ln, bx, y - h + 24 + i * 19));
+  function toFeast() {
+    phase = 'feast'; feastT = 0;
+    Z.audio.sfx.coin();
+    Z.fx.screenFlash(0.22, '#ffdca0');
+    openMenu(true);
   }
-  function wrap(t, n) { const w = t.split(' '), out = []; let l = ''; for (const word of w) { if ((l + word).length > n) { out.push(l.trim()); l = ''; } l += word + ' '; } if (l.trim()) out.push(l.trim()); return out; }
 
-  function buy(dish) {
-    if (Z.state.buff && Z.state.buff.id === dish.id) { Z.ui.toast('Already got that in you', 'warn'); return; }
-    if (!Z.state.spend(dish.price)) { Z.audio.sfx.error(); Z.ui.toast('Not enough cash', 'warn'); return; }
+  // the 'ramen.eating' art as a big warm cut-in behind the dialogue box
+  function drawFeast(ctx, W, H, dt, t) {
+    // base interior, then dissolve the group-eating cut-in over it
+    if (!Z.assets.cover(ctx, 'ramen.inside', 0, 0, W, H, 0.5)) { ctx.fillStyle = '#2a1e12'; ctx.fillRect(0, 0, W, H); }
+    feastT = Math.min(1, feastT + dt * 2.4);
+    ctx.save(); ctx.globalAlpha = feastT;
+    if (!Z.assets.cover(ctx, 'ramen.eating', 0, 0, W, H, 0.5)) {
+      const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#3a2a18'); g.addColorStop(1, '#241a10');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    }
+    ctx.restore();
+
+    // top vignette so the dialogue box reads
+    const gg = ctx.createLinearGradient(0, H * 0.5, 0, H);
+    gg.addColorStop(0, 'rgba(24,14,6,0)'); gg.addColorStop(1, 'rgba(24,14,6,.5)');
+    ctx.fillStyle = gg; ctx.fillRect(0, H * 0.5, W, H * 0.5);
+
+    // curling steam wisps rising off the bowls
+    if (steam.length < 22 && Math.random() < 0.5) {
+      steam.push({ x: U.rand(0.28, 0.72) * W, y: H * U.rand(0.62, 0.74), vy: U.rand(-26, -14), life: U.rand(1.1, 2.0), max: 2.0, s: U.rand(7, 16), ph: U.rand(0, 6.28) });
+    }
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (let i = steam.length - 1; i >= 0; i--) {
+      const p = steam[i]; p.life -= dt; if (p.life <= 0) { steam.splice(i, 1); continue; }
+      p.y += p.vy * dt; p.x += Math.sin(t * 1.6 + p.ph) * 10 * dt;
+      const a = U.clamp(p.life / p.max, 0, 1) * 0.16;
+      const g = ctx.createRadialGradient(p.x, p.y, 1, p.x, p.y, p.s);
+      g.addColorStop(0, U.rgba('#fff4e0', a)); g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, U.TAU); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // ---------------- ordering (Persona answer-choices) ----------------
+  function buffTag(dish) {
+    const hp = Math.round((dish.hpMul - 1) * 100), pw = Math.round((dish.powMul - 1) * 100);
+    return '+' + hp + '% HP' + (pw ? '  +' + pw + '% PWR' : '');
+  }
+  function snackLabel(dish, active, poor) {
+    let tail = active ? '  — already eaten' : ('  · ¥' + dish.price + (poor ? '  (short)' : ''));
+    return dish.name + '  (' + buffTag(dish) + ')' + tail;
+  }
+
+  const AO_SERVE = [
+    'One {name}, coming up. Feel the broth reach your servos yet?',
+    '{name}. Good pick. Eat slow — the strength settles into the frame that way.',
+    'There. {name}. Step onto the dohyo warm and they will feel it in every hit.',
+    'Order up: {name}. The steam alone would scare a KANE-CO drone off.',
+  ];
+
+  function doBuy(dish) {
+    Z.state.spend(dish.price);
     Z.state.setBuff({ id: dish.id, name: dish.name, hpMul: dish.hpMul, powMul: dish.powMul });
-    Z.audio.sfx.buy(); Z.ui.toast('Ate ' + dish.name + ' — ready for the next scrap', 'gold');
-    greetLine = U.choice(LINES());
-    renderMenu();
+    Z.audio.sfx.buy();
+    Z.fx.screenFlash(0.14, '#ffd98a');
+    Z.ui.toast('Ate ' + dish.name + ' — belly warm for the next duel', 'gold');
   }
 
-  function renderMenu() {
-    const npc = $('#ramenNpc'); if (npc) npc.innerHTML = '<b>Ao:</b> "What will it be?"' + (Z.state.buff ? ` <b>Belly full: ${Z.state.buff.name}</b>` : '');
-    const host = $('#ramenList'); if (!host) return; U.clear(host);
-    D.RAMEN.forEach((dish) => {
+  function buildMenu(isFirst) {
+    const askText = U.choice(isFirst ? ASK_FIRST : ASK_MORE);
+    const choices = [];
+    (D.RAMEN || []).forEach((dish) => {
       const active = Z.state.buff && Z.state.buff.id === dish.id;
-      const card = U.el('div', 'dish');
-      const hp = Math.round((dish.hpMul - 1) * 100), pw = Math.round((dish.powMul - 1) * 100);
-      card.innerHTML = `<div class="d-head"><canvas class="d-ic"></canvas><h3>${dish.name}</h3></div><p>${dish.desc}</p>
-        <div class="d-foot"><span class="q-rew">+${hp}% HP${pw ? ' · +' + pw + '% PWR' : ''}</span>
-        <span class="d-price">¥${dish.price}</span></div>`;
-      Z.render.drawFoodIcon(card.querySelector('.d-ic'), dish);
-      const b = U.el('button', 'pbtn tiny' + (active ? '' : ' stamp'), active ? 'EATEN' : 'ORDER');
-      b.style.marginTop = '10px'; b.disabled = active || Z.state.credits < dish.price;
-      b.addEventListener('click', () => buy(dish));
-      card.appendChild(b);
-      host.appendChild(card);
+      const poor = Z.state.credits < dish.price;
+      let then, act;
+      if (active) {
+        act = () => { Z.audio.sfx.hover(); };
+        then = [{ who: 'Ao', img: 'ao', text: 'That glow is still in you. No sense doubling a good thing — save your coin.' }];
+      } else if (poor) {
+        act = () => { Z.audio.sfx.error(); Z.ui.toast('Not enough credits', 'warn'); };
+        then = [{ who: 'Ao', img: 'ao', text: 'Purse is a little light for that one. Win a bout, then come back. The pot keeps.' }];
+      } else {
+        act = () => doBuy(dish);
+        then = [{ who: 'Ao', img: 'ao', text: U.choice(AO_SERVE).replace('{name}', dish.name) }];
+      }
+      choices.push({ label: snackLabel(dish, active, poor), act, then });
     });
-    Z.ui.updateWallet();
+
+    // cozy crew banter branch
+    choices.push({ label: 'Just here to sit a while.', then: chatterScene() });
+    // exit
+    choices.push({
+      label: 'Maybe later. Heading out.',
+      act: () => { leaving = true; },
+      then: [{ who: 'Ao', img: 'ao', text: U.choice(['Door is always open. Fight clean, come back hungry.', 'Go on then. The dohyo waits, and so does the broth.', 'Off you go. Try not to come home as spare parts.']) }],
+    });
+
+    return [{ who: 'Ao', img: 'ao', text: askText, choices }];
+  }
+
+  // cozy Persona-style hangout banter with the crew at the counter
+  function chatterScene() {
+    const options = [
+      [
+        { who: 'Tengu', img: 'tengu', side: 'right', text: 'Kid finally sat down. I was about to eat your bowl for you.' },
+        { who: 'Kappa', img: 'kappa', text: 'He would have, too. Watch him near your chashu. Watch him always.' },
+        { who: 'Ao', img: 'ao', text: 'Peace at my counter. Everyone gets a bowl. Even the ones who steal them.' },
+      ],
+      [
+        { who: 'Kappa', img: 'kappa', side: 'right', text: 'I re-seated a wobbly servo on your left leg while you walked in. Do not thank me. Slurp louder instead.' },
+        { who: 'Ao', img: 'ao', text: 'That is how this town says friend. Fix a joint, share a bowl, say nothing sweet about it.' },
+      ],
+      [
+        { who: 'Ao', img: 'ao', text: 'KANE-CO measured my noodle steam yesterday. For "asset value." I offered them a taste. They fled.' },
+        { who: 'Tengu', img: 'tengu', side: 'right', text: 'They fear what they cannot put on a clipboard. Warmth, mostly.' },
+      ],
+      [
+        { who: 'Ao', img: 'ao', text: greet() },
+        { who: 'Ao', img: 'ao', text: 'Rest the frame here as long as you like. The dohyo will still be there, hungry as ever.' },
+      ],
+    ];
+    return U.choice(options);
+  }
+
+  function openMenu(isFirst) {
+    phase = 'feast';
+    leaving = false;
+    Z.cutscene.play(buildMenu(isFirst), onMenuDone);
+  }
+
+  function onMenuDone() {
+    if (leaving) {
+      leaving = false; menuLaunched = false;
+      Z.ui.show('world');
+      return;
+    }
+    first = false;
+    openMenu(false);           // loop back to the counter for another round
+  }
+
+  // hidden DOM stays unused; keep a safe render export
+  function render() {
+    const npc = $('#ramenNpc'), list = $('#ramenList');
+    if (npc) npc.classList.remove('on');
+    if (list) list.classList.remove('on');
   }
 
   function init() { Z.ui.onEnter('ramen', enter); }
-  return { init, frame, render: renderMenu };
+  return { init, frame, render };
 })();

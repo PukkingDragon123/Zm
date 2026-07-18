@@ -1,572 +1,772 @@
 /* ================================================================
-   infil.js — KANE-CO CAMPS. Sneak-in parkour platformer levels
-   (Mario/Celeste-lite): coyote time, jump buffering, guards with
-   vision cones, and the tanuki's HENGE transformations —
-   ROCK (heavy, smash, hide), PAPER (glide, ride updrafts),
-   SCISSORS (dash-cut fences). Rewards: parts + scrap.
+   infil.js — KANE-CO CAMPS. Industrial-obby platformer built from
+   the uploaded steel/concrete tile sprites. Placed-object levels
+   (real AABB hitboxes that match the art), coyote-time + jump-buffer,
+   a lerp camera, patrol drones with lantern vision cones, and the
+   tanuki's HENGE forms:
+     TANUKI  — nimble run / jump
+     ROCK    — heavy, smashes crates on landing, still-hides from drones
+     PAPER   — the hang-glider: low gravity, rides fan updrafts
+     SCISSORS— fast dash that cuts lattice fences
+   Rewards: mech parts + scrap.  API preserved: {init, frame, playing, leave}
    ================================================================ */
 Z.infil = (function () {
   const U = Z.util, D = Z.data;
-  const TILE = 46;
   const FORMS = ['tanuki', 'rock', 'paper', 'scissors'];
   const FORM_LABEL = { tanuki: 'TANUKI', rock: 'ROCK', paper: 'PAPER', scissors: 'SCISSORS' };
   const GOLD = '#ffd98a', SPIRIT = '#8fe6cf';
 
-  // ---- levels: # crate | = platform | ^ spikes | C cracked (rock smash)
-  //      F fence (scissors cut) | U updraft (paper rises) | G guard | * part | s scrap
-  //      P start | E exit
+  // native tile dimensions (from the sliced sheet) — used for aspect-correct fit
+  const TDIM = {
+    t00: [280, 176], t01: [146, 176], t02: [117, 177], t03: [113, 176], t04: [119, 177],
+    t05: [103, 180], t06: [299, 101], t07: [147, 98], t08: [252, 81], t09: [189, 86],
+    t10: [345, 122], t11: [157, 103], t12: [220, 137], t13: [431, 93], t14: [79, 260],
+    t15: [53, 282], t16: [200, 55], t17: [193, 50], t18: [147, 103], t19: [96, 95],
+    t20: [60, 74], t21: [88, 87], t22: [77, 117], t23: [109, 263], t24: [245, 208],
+    t25: [142, 198], t26: [139, 109], t27: [137, 126], t28: [189, 69], t29: [94, 101],
+    t30: [77, 164], t31: [123, 169], t32: [275, 165], t33: [148, 124], t34: [88, 124],
+    t35: [174, 60], t36: [150, 81], t37: [172, 110], t38: [249, 122], t39: [265, 123],
+    t40: [171, 158], t41: [134, 169], t42: [194, 121], t43: [128, 120], t44: [142, 113],
+  };
+  const aspect = (tile) => { const d = TDIM[tile]; return d ? d[1] / d[0] : 0.5; };
+  const tileImg = (tile) => Z.assets.img('tile.' + tile);
+  function drawTile(ctx, tile, x, y, w, h) {
+    const im = tileImg(tile);
+    if (im) ctx.drawImage(im, x, y, w, h);
+    else { ctx.fillStyle = '#2b333b'; ctx.fillRect(x, y, w, h); }
+  }
+
+  // ================================================================
+  //  LEVELS  — placed objects in world pixels. h is optional on any
+  //  object except structural solids; when omitted it is derived from
+  //  the tile's native aspect so the art is never distorted.
+  //  kinds:  solids (collide all sides)  oneways (land from above)
+  //          hazards{kind:spike|steam}   fans (updraft column above)
+  //          crates (rock-smash)         fences (scissors-cut)
+  //          ladders  decor{par}  pickups{kind}  guards  checkpoints
+  // ================================================================
   const LEVELS = [
     {
-      id: 'camp1', name: 'Supply Yard', hint: 'Smash crates as ROCK. Cut fences as SCISSORS.', minRank: 1,
+      id: 'camp1', name: 'Supply Yard', minRank: 1,
+      hint: 'Hop the pipes. Smash a crate as ROCK, snip a fence as SCISSORS.',
       reward: { parts: 2, rarity: 'uncommon', scrap: 20 },
-      map: [
-        '..............................................',
-        '..............................................',
-        '..............*...............................',
-        '............#####.............................',
-        '.....................=....*..................E',
-        '........=..........#####..........s........###',
-        '..................................##..F.......',
-        '..P......C..............................F.....',
-        '.####...###....==...........#####..###.F...###',
-        '.####...###.............^^..#####..###.####...',
-        '.####...###..#####......#########..###########',
+      w: 3020, h: 840, spawn: { x: 120, y: 600 }, exit: { tile: 't24', x: 2770, y: 455, w: 190, h: 150 },
+      solids: [
+        { tile: 't00', x: -60, y: 600, w: 560, h: 260 },
+        { tile: 't38', x: 500, y: 600, w: 260, h: 260 },
+        { tile: 't39', x: 900, y: 600, w: 440, h: 260 },
+        { tile: 't00', x: 1340, y: 600, w: 520, h: 260 },
+        { tile: 't38', x: 1860, y: 600, w: 520, h: 260 },
+        { tile: 't39', x: 2380, y: 600, w: 700, h: 260 },
+        { tile: 't43', x: 1660, y: 470, w: 120, h: 130 },
       ],
+      oneways: [
+        { tile: 't16', x: 770, y: 556, w: 140 },
+        { tile: 't11', x: 1470, y: 500, w: 150 },
+        { tile: 't09', x: 1500, y: 372, w: 160 },
+        { tile: 't10', x: 1760, y: 356, w: 220 },
+        { tile: 't16', x: 2070, y: 520, w: 150 },
+      ],
+      hazards: [
+        { tile: 't35', x: 2040, y: 566, w: 190, kind: 'spike' },
+      ],
+      fans: [],
+      crates: [
+        { tile: 't33', x: 1000, y: 516, w: 100, h: 84 },
+        { tile: 't33', x: 1140, y: 516, w: 100, h: 84 },
+      ],
+      fences: [
+        { tile: 't12', x: 1300, y: 516, w: 74, h: 84 },
+      ],
+      ladders: [],
+      decor: [
+        { tile: 't04', x: 120, y: 300, w: 150, par: 0.35 },
+        { tile: 't02', x: 300, y: 320, w: 140, par: 0.35 },
+        { tile: 't23', x: 640, y: 250, w: 120, par: 0.4 },
+        { tile: 't28', x: 900, y: 280, w: 220, par: 0.45 },
+        { tile: 't29', x: 1180, y: 300, w: 110, par: 0.45 },
+        { tile: 't30', x: 760, y: 430, w: 90, par: 0.7 },
+        { tile: 't05', x: 1500, y: 300, w: 130, par: 0.35 },
+        { tile: 't03', x: 1700, y: 320, w: 130, par: 0.35 },
+        { tile: 't18', x: 2000, y: 300, w: 150, par: 0.45 },
+        { tile: 't21', x: 2260, y: 360, w: 90, par: 0.6 },
+        { tile: 't34', x: 480, y: 528, w: 70, par: 1 },
+        { tile: 't40', x: 1360, y: 500, w: 150, par: 1 },
+        { tile: 't44', x: 2320, y: 545, w: 120, par: 1 },
+        { tile: 't41', x: 2600, y: 470, w: 120, par: 1 },
+      ],
+      pickups: [
+        { x: 1050, y: 470, kind: 'scrap' },
+        { x: 1870, y: 320, kind: 'part' },
+        { x: 2560, y: 560, kind: 'scrap' },
+      ],
+      guards: [
+        { x0: 2440, x1: 2820, y: 600, dir: -1 },
+      ],
+      checkpoints: [{ x: 900, y: 600 }, { x: 1860, y: 600 }, { x: 2400, y: 600 }],
     },
+
     {
-      id: 'camp2', name: 'Watch Post', hint: 'Guards ignore a still ROCK. Ride vents as PAPER.', minRank: 2,
+      id: 'camp2', name: 'Watch Post', minRank: 2,
+      hint: 'Drones ignore a still ROCK. Glide the gaps and ride the vent as PAPER.',
       reward: { parts: 2, rarity: 'rare', scrap: 35 },
-      map: [
-        '..............................#...............',
-        '..........................*..#...............E',
-        '........................####..#............####',
-        '..............................#......=........',
-        '....=.........................#...............',
-        '..........=........s..........#..U............',
-        '..P...............###.........#..U.....G......',
-        '.###....G......................#..U...######...',
-        '.###..######....==....^^......##..U............',
-        '.###..######........######....##..U...########.',
-        '.############.......######....################.',
+      w: 3320, h: 900, spawn: { x: 110, y: 640 }, exit: { tile: 't25', x: 3120, y: 470, w: 150, h: 200 },
+      solids: [
+        { tile: 't00', x: -60, y: 640, w: 520, h: 260 },
+        { tile: 't39', x: 460, y: 640, w: 300, h: 260 },
+        { tile: 't38', x: 1180, y: 640, w: 360, h: 260 },
+        { tile: 't00', x: 1540, y: 640, w: 300, h: 260 },
+        { tile: 't39', x: 2300, y: 640, w: 340, h: 260 },
+        { tile: 't00', x: 2640, y: 640, w: 700, h: 260 },
+        { tile: 't01', x: 900, y: 470, w: 130, h: 170 },
+        { tile: 't43', x: 2020, y: 520, w: 120, h: 120 },
       ],
+      oneways: [
+        { tile: 't06', x: 780, y: 500, w: 240 },
+        { tile: 't10', x: 1560, y: 470, w: 220 },
+        { tile: 't13', x: 1880, y: 470, w: 200, move: { axis: 'x', min: 1880, max: 2020, speed: 1.3 } },
+        { tile: 't07', x: 2660, y: 470, w: 150 },
+        { tile: 't11', x: 2860, y: 388, w: 150 },
+      ],
+      hazards: [
+        { tile: 't36', x: 470, y: 606, w: 150, kind: 'steam' },
+        { tile: 't35', x: 1300, y: 606, w: 174, kind: 'spike' },
+        { tile: 't37', x: 2320, y: 592, w: 172, kind: 'steam' },
+      ],
+      fans: [
+        { tile: 't26', x: 1030, y: 560, w: 150 },
+        { tile: 't27', x: 2140, y: 552, w: 150 },
+      ],
+      crates: [
+        { tile: 't33', x: 1180, y: 556, w: 96, h: 84 },
+      ],
+      fences: [],
+      ladders: [
+        { tile: 't14', x: 2560, y: 470, w: 66, h: 170 },
+      ],
+      decor: [
+        { tile: 't02', x: 120, y: 320, w: 150, par: 0.32 },
+        { tile: 't24', x: 360, y: 300, w: 220, par: 0.4 },
+        { tile: 't28', x: 700, y: 300, w: 220, par: 0.45 },
+        { tile: 't23', x: 1050, y: 230, w: 120, par: 0.38 },
+        { tile: 't19', x: 1360, y: 300, w: 120, par: 0.45 },
+        { tile: 't20', x: 1520, y: 330, w: 70, par: 0.5 },
+        { tile: 't05', x: 1800, y: 320, w: 130, par: 0.32 },
+        { tile: 't29', x: 2100, y: 300, w: 110, par: 0.45 },
+        { tile: 't30', x: 1160, y: 500, w: 90, par: 0.7 },
+        { tile: 't31', x: 2500, y: 300, w: 150, par: 0.4 },
+        { tile: 't34', x: 1560, y: 568, w: 70, par: 1 },
+        { tile: 't40', x: 760, y: 580, w: 150, par: 1 },
+        { tile: 't41', x: 2760, y: 470, w: 120, par: 1 },
+        { tile: 't44', x: 3000, y: 585, w: 120, par: 1 },
+      ],
+      pickups: [
+        { x: 900, y: 420, kind: 'part' },
+        { x: 1660, y: 430, kind: 'scrap' },
+        { x: 2200, y: 360, kind: 'part' },
+        { x: 2930, y: 350, kind: 'scrap' },
+      ],
+      guards: [
+        { x0: 800, x1: 1120, y: 640, dir: 1 },
+        { x0: 1560, x1: 1820, y: 640, dir: -1 },
+        { x0: 2680, x1: 3060, y: 640, dir: 1 },
+      ],
+      checkpoints: [{ x: 780, y: 640 }, { x: 1560, y: 640 }, { x: 2300, y: 640 }, { x: 2680, y: 640 }],
     },
+
     {
-      id: 'camp3', name: 'Depot Roof', hint: 'Chain glides. Time the patrols. Take their best parts.', minRank: 3,
+      id: 'camp3', name: 'Depot Roof', minRank: 3,
+      hint: 'Ladders, chain-lifts and hard patrols. Cut the gate, ride the drafts, grab their best cores.',
       reward: { parts: 3, rarity: 'epic', scrap: 60 },
-      map: [
-        '...................*..........................',
-        '..................###..........U....*.........',
-        '..........................F....U...####......E',
-        '....=......=......=.......F....U...........####',
-        '...........................F..................',
-        '..P.....................####..........G.......',
-        '.###........G..................^^...#####.....',
-        '.###......#####....==..==......##.............',
-        '.###..^^..#####................##....s....^^^..',
-        '.#############...C#C...########################',
-        '.#############...###...########################',
+      w: 3620, h: 940, spawn: { x: 110, y: 660 }, exit: { tile: 't24', x: 3400, y: 505, w: 190, h: 150 },
+      solids: [
+        { tile: 't00', x: -60, y: 660, w: 460, h: 280 },
+        { tile: 't39', x: 400, y: 660, w: 260, h: 280 },
+        { tile: 't38', x: 980, y: 660, w: 260, h: 280 },
+        { tile: 't00', x: 1600, y: 660, w: 300, h: 280 },
+        { tile: 't39', x: 2260, y: 660, w: 260, h: 280 },
+        { tile: 't00', x: 2880, y: 660, w: 740, h: 280 },
+        { tile: 't06', x: 660, y: 470, w: 260, h: 60 },
+        { tile: 't43', x: 1240, y: 540, w: 120, h: 120 },
+        { tile: 't01', x: 2520, y: 500, w: 140, h: 160 },
       ],
+      oneways: [
+        { tile: 't11', x: 1000, y: 500, w: 150 },
+        { tile: 't10', x: 1360, y: 440, w: 220 },
+        { tile: 't32', x: 1900, y: 520, w: 200, move: { axis: 'y', min: 380, max: 560, speed: 1.0 } },
+        { tile: 't07', x: 2260, y: 470, w: 150 },
+        { tile: 't13', x: 2660, y: 470, w: 200, move: { axis: 'x', min: 2620, max: 2820, speed: 1.5 } },
+        { tile: 't09', x: 3060, y: 470, w: 160 },
+        { tile: 't08', x: 3240, y: 388, w: 200 },
+      ],
+      hazards: [
+        { tile: 't35', x: 470, y: 626, w: 174, kind: 'spike' },
+        { tile: 't37', x: 1000, y: 612, w: 172, kind: 'steam' },
+        { tile: 't35', x: 1620, y: 626, w: 174, kind: 'spike' },
+        { tile: 't36', x: 2280, y: 626, w: 150, kind: 'steam' },
+        { tile: 't35', x: 2940, y: 626, w: 174, kind: 'spike' },
+      ],
+      fans: [
+        { tile: 't27', x: 2080, y: 572, w: 150 },
+        { tile: 't26', x: 3230, y: 570, w: 150 },
+      ],
+      crates: [
+        { tile: 't33', x: 1620, y: 576, w: 96, h: 84 },
+        { tile: 't33', x: 1716, y: 576, w: 96, h: 84 },
+      ],
+      fences: [
+        { tile: 't12', x: 820, y: 500, w: 76, h: 160 },
+        { tile: 't12', x: 3000, y: 586, w: 76, h: 74 },
+      ],
+      ladders: [
+        { tile: 't14', x: 620, y: 470, w: 66, h: 190 },
+        { tile: 't14', x: 2480, y: 340, w: 66, h: 320 },
+      ],
+      decor: [
+        { tile: 't24', x: 150, y: 300, w: 240, par: 0.35 },
+        { tile: 't23', x: 480, y: 220, w: 120, par: 0.34 },
+        { tile: 't28', x: 900, y: 300, w: 220, par: 0.45 },
+        { tile: 't05', x: 1200, y: 320, w: 130, par: 0.32 },
+        { tile: 't18', x: 1500, y: 300, w: 150, par: 0.45 },
+        { tile: 't19', x: 1700, y: 320, w: 120, par: 0.45 },
+        { tile: 't29', x: 2000, y: 300, w: 110, par: 0.45 },
+        { tile: 't31', x: 2300, y: 300, w: 150, par: 0.4 },
+        { tile: 't42', x: 2700, y: 330, w: 170, par: 0.42 },
+        { tile: 't30', x: 1360, y: 380, w: 90, par: 0.7 },
+        { tile: 't21', x: 3050, y: 340, w: 90, par: 0.6 },
+        { tile: 't34', x: 1400, y: 608, w: 70, par: 1 },
+        { tile: 't40', x: 2560, y: 640, w: 150, par: 1 },
+        { tile: 't41', x: 3300, y: 505, w: 120, par: 1 },
+        { tile: 't44', x: 340, y: 605, w: 120, par: 1 },
+      ],
+      pickups: [
+        { x: 790, y: 430, kind: 'part' },
+        { x: 1460, y: 400, kind: 'scrap' },
+        { x: 2000, y: 340, kind: 'part' },
+        { x: 2480, y: 300, kind: 'scrap' },
+        { x: 3150, y: 420, kind: 'part' },
+      ],
+      guards: [
+        { x0: 1000, x1: 1220, y: 660, dir: 1 },
+        { x0: 1620, x1: 1880, y: 660, dir: -1 },
+        { x0: 2280, x1: 2500, y: 660, dir: 1 },
+        { x0: 2960, x1: 3320, y: 660, dir: -1 },
+      ],
+      checkpoints: [{ x: 660, y: 660 }, { x: 1240, y: 660 }, { x: 1900, y: 660 }, { x: 2520, y: 660 }, { x: 2960, y: 660 }],
     },
   ];
 
+  // ---------- runtime ----------
   let mode = 'select';           // select | play | done
-  let lvl = null, grid = null, W0 = 0, H0 = 0;
-  let p = null, guards = [], pickups = [], broken = null, cut = null;
-  let camX = 0, camY = 0, t = 0, deaths = 0, got = [], alarmT = 0, doneT = 0;
-  let coyote = 0, jbuf = 0, formPoof = 0;
-  let terrainCv = null, shadowCv = null, spores = null;   // silksong dressing
+  let L = null;
+  let solids = [], oneways = [], hazards = [], fans = [], crates = [], fences = [], ladders = [], decor = [], pickups = [], guards = [], checkpoints = [];
+  let p = null, camX = 0, camY = 0, t = 0, deaths = 0, got = [], alarmT = 0, doneT = 0;
+  let coyote = 0, jbuf = 0, formPoof = 0, cp = null, reachedCp = null;
+  let motes = null;
 
-  // ---------- level select ----------
+  const PHYS = {
+    tanuki:   { run: 240, jump: 700, grav: 1900, fall: 1000, pw: 17, ph: 48 },
+    rock:     { run: 130, jump: 0,   grav: 2800, fall: 1500, pw: 22, ph: 40 },
+    paper:    { run: 195, jump: 340, grav: 560,  fall: 155,  pw: 24, ph: 40 },
+    scissors: { run: 275, jump: 640, grav: 1900, fall: 1000, pw: 16, ph: 44 },
+  };
+
+  // ---------- level select (DOM) ----------
   function renderSelect() {
     const host = document.getElementById('infilList'); if (!host) return; U.clear(host);
     host.style.display = '';
-    LEVELS.forEach((L) => {
-      const done = !!Z.state.campsDone[L.id], locked = Z.state.rankTier < L.minRank;
+    LEVELS.forEach((lv) => {
+      const done = !!Z.state.campsDone[lv.id], locked = Z.state.rankTier < lv.minRank;
       const card = U.el('div', 'quest' + (done ? ' done' : '') + (locked ? ' locked' : ''));
-      card.innerHTML = `${done ? '<div class="q-badge">CLEARED</div>' : ''}<h3>${L.name}</h3>
-        <p>${L.hint}</p>
-        <div class="q-foot"><span class="q-rew">${L.reward.parts} parts (${L.reward.rarity}+) · ${L.reward.scrap} scrap</span>
-        <span style="color:var(--ink2)">${locked ? 'Needs rank ' + L.minRank : ''}</span></div>`;
+      card.innerHTML = `${done ? '<div class="q-badge">CLEARED</div>' : ''}<h3>${lv.name}</h3>
+        <p>${lv.hint}</p>
+        <div class="q-foot"><span class="q-rew">${lv.reward.parts} parts (${lv.reward.rarity}+) &middot; ${lv.reward.scrap} scrap</span>
+        <span style="color:var(--ink2)">${locked ? 'Needs rank ' + lv.minRank : ''}</span></div>`;
       if (!locked) {
         const b = U.el('button', 'pbtn ' + (done ? 'tiny' : 'stamp'), done ? 'SNEAK AGAIN (1 part)' : 'SNEAK IN');
-        b.addEventListener('click', () => startLevel(L));
+        b.addEventListener('click', () => startLevel(lv));
         card.appendChild(b);
       }
       host.appendChild(card);
     });
   }
 
-  function startLevel(L) {
-    lvl = L; const wmax = Math.max.apply(null, L.map.map((r) => r.length));
-    grid = L.map.map((r) => r.padEnd(wmax, '.').split(''));
-    H0 = grid.length; W0 = grid[0].length;
-    guards = []; pickups = []; broken = {}; cut = {};
-    let sx = 2, sy = 2;
-    for (let y = 0; y < H0; y++) for (let x = 0; x < W0; x++) {
-      const c = grid[y][x];
-      if (c === 'P') { sx = x; sy = y; grid[y][x] = '.'; }
-      else if (c === 'G') { guards.push({ x: x * TILE + TILE / 2, y: (y + 1) * TILE, dir: 1, x0: x * TILE - TILE * 2.4, x1: x * TILE + TILE * 3.4, ph: Math.random() * 6 }); grid[y][x] = '.'; }
-      else if (c === '*' || c === 's') { pickups.push({ x: x * TILE + TILE / 2, y: y * TILE + TILE / 2, kind: c === '*' ? 'part' : 'scrap', got: false }); grid[y][x] = '.'; }
-    }
-    p = { x: sx * TILE + TILE / 2, y: (sy + 1) * TILE, vx: 0, vy: 0, form: 'tanuki', facing: 1, onG: false, walk: 0, dashT: 0, spawn: { x: sx * TILE + TILE / 2, y: (sy + 1) * TILE } };
-    deaths = 0; got = []; alarmT = 0; doneT = 0; t = 0; mode = 'play';
-    buildTerrain();
+  // fill missing heights from tile aspect; clone arrays so movers/breaks don't mutate the level def
+  function norm(list, keepH) {
+    return (list || []).map((o) => {
+      const h = (keepH || o.h != null) ? o.h : Math.round(o.w * aspect(o.tile));
+      return Object.assign({}, o, { h: h, ox: o.x, oy: o.y, _dx: 0, _dy: 0 });
+    });
+  }
+
+  function startLevel(lv) {
+    L = lv;
+    solids = norm(lv.solids, true);
+    oneways = norm(lv.oneways);
+    hazards = norm(lv.hazards);
+    fans = norm(lv.fans);
+    crates = norm(lv.crates, true).map((c) => (c.alive = true, c));
+    fences = norm(lv.fences, true).map((f) => (f.alive = true, f));
+    ladders = norm(lv.ladders, true);
+    decor = norm(lv.decor);
+    pickups = (lv.pickups || []).map((k) => ({ x: k.x, y: k.y, kind: k.kind, got: false }));
+    guards = (lv.guards || []).map((g) => ({ x: (g.x0 + g.x1) / 2, x0: g.x0, x1: g.x1, y: g.y, dir: g.dir || 1, ph: Math.random() * 6 }));
+    checkpoints = (lv.checkpoints || []).map((c, i) => ({ x: c.x, y: c.y, idx: i }));
+    cp = { x: lv.spawn.x, y: lv.spawn.y }; reachedCp = -1;
+    p = { x: lv.spawn.x, y: lv.spawn.y, vx: 0, vy: 0, form: 'tanuki', facing: 1, onG: false, walk: 0, dashT: 0, mover: null, climbing: false, squash: 0 };
+    deaths = 0; got = []; alarmT = 0; doneT = 0; t = 0; coyote = jbuf = formPoof = 0;
+    camX = U.clamp(p.x - Z.render.W / 2, 0, Math.max(0, lv.w - Z.render.W));
+    camY = U.clamp(p.y - Z.render.H * 0.62, -40, Math.max(0, lv.h - Z.render.H));
+    mode = 'play';
     document.getElementById('infilList').style.display = 'none';
     document.getElementById('infilHud').style.display = '';
     Z.controls.setMode('infil');
-    Z.ui.toast('SKILL key changes form — tanuki, rock, paper, scissors', 'gold');
+    Z.ui.toast('SKILL cycles form: tanuki - rock - paper - scissors', 'gold');
   }
 
-  // ---------- tiles ----------
-  const at = (tx, ty) => (tx < 0 || tx >= W0 || ty < 0 || ty >= H0) ? (ty >= H0 ? '.' : '#') : grid[ty][tx];
-  function solidAt(px, py, form) {
-    const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
-    const c = at(tx, ty);
-    if (c === '#') return true;
-    if (c === 'C') return !broken[tx + ',' + ty];
-    if (c === 'F') return !cut[tx + ',' + ty];
-    return false;
+  // ---------- collision helpers ----------
+  const overlap = (l, t2, w, h, b) => l < b.x + b.w && l + w > b.x && t2 < b.y + b.h && t2 + h > b.y;
+  function blockers() {
+    const arr = solids.slice();
+    for (const c of crates) if (c.alive) arr.push(c);
+    for (const f of fences) if (f.alive) arr.push(f);
+    return arr;
   }
-  function platAt(px, py) { const c = at(Math.floor(px / TILE), Math.floor(py / TILE)); return c === '='; }
 
   // ---------- update ----------
-  const PHYS = {
-    tanuki:   { run: 230, jump: 660, grav: 1900, fall: 900, size: 30 },
-    rock:     { run: 110, jump: 0,   grav: 2600, fall: 1400, size: 30 },
-    paper:    { run: 170, jump: 430, grav: 620,  fall: 110,  size: 26 },
-    scissors: { run: 250, jump: 580, grav: 1900, fall: 900, size: 26 },
-  };
-
   function update(dt) {
-    if (mode !== 'play') { if (mode === 'done') { doneT += dt; } return; }
+    if (mode !== 'play') { if (mode === 'done') doneT += dt; return; }
     t += dt;
     const ph = PHYS[p.form];
     const dir = Z.controls.dir;
     if (dir) p.facing = dir;
+
     // form cycle
     if (Z.controls.consumeSkill()) {
       const i = FORMS.indexOf(p.form); p.form = FORMS[(i + 1) % FORMS.length];
-      formPoof = 0.4; Z.fx.dust(p.x, p.y, 8, '#cbb489'); Z.fx.ring(p.x, p.y - 20, SPIRIT, 4, 50, 0.3);
+      formPoof = 0.4; p.dashT = 0; p.climbing = false;
+      Z.fx.dust(p.x, p.y - 18, 8, '#cbb489'); Z.fx.ring(p.x, p.y - 20, SPIRIT, 4, 50, 0.3);
       Z.audio.sfx.flip(); Z.ui.toast(FORM_LABEL[p.form], 'gold');
     }
     if (formPoof > 0) formPoof -= dt;
-    // scissors dash (attack key too)
-    if (p.form === 'scissors' && Z.controls.consumeAttack()) {
-      if (p.dashT <= 0) { p.dashT = 0.22; Z.fx.speedLines(0.16, SPIRIT); Z.audio.sfx.boost(); }
+
+    // move platforms (and carry the player if riding)
+    for (const o of oneways) {
+      if (!o.move) continue;
+      o.mt = (o.mt || 0) + dt;
+      const m = o.move, s = Math.sin(o.mt * m.speed) * 0.5 + 0.5, nx = U.lerp(m.min, m.max, s);
+      if (m.axis === 'x') { o._dx = nx - o.x; o.x = nx; } else { o._dy = nx - o.y; o.y = nx; }
     }
-    if (p.dashT > 0) { p.dashT -= dt; p.vx = p.facing * 560; p.vy = 0; cutFences(); }
+    if (p.mover && p.onG) { p.x += p.mover._dx || 0; p.y += p.mover._dy || 0; }
+
+    // ---- ladders ----
+    const onLadder = ladders.some((ld) => p.x > ld.x - 6 && p.x < ld.x + ld.w + 6 && p.y > ld.y - 4 && p.y - ph.ph < ld.y + ld.h);
+    p.climbing = onLadder && Z.controls.held.up && p.form !== 'rock';
+
+    // ---- horizontal intent ----
+    if (p.form === 'scissors' && Z.controls.consumeAttack() && p.dashT <= 0) startDash();
+    if (p.dashT > 0) { p.dashT -= dt; p.vx = p.facing * 620; p.vy = 0; cutFences(); }
     else p.vx += (dir * ph.run - p.vx) * Math.min(1, dt * 14);
 
-    // jumping: buffer + coyote (paper can always flap weakly)
-    if (Z.controls.consumeJump()) jbuf = 0.12;
+    // ---- jump: buffer + coyote ----
+    if (Z.controls.consumeJump()) {
+      if (p.form === 'scissors' && dir !== 0 && p.dashT <= 0) startDash();  // scissors + move = dash (mobile)
+      else jbuf = 0.12;
+    }
     if (jbuf > 0) jbuf -= dt;
-    if (p.onG) coyote = 0.1; else if (coyote > 0) coyote -= dt;
-    if (jbuf > 0 && (coyote > 0 || p.form === 'paper') && ph.jump) {
-      if (coyote > 0 || p.form !== 'paper' || p.vy < 60) {
-        p.vy = -ph.jump; jbuf = 0; coyote = 0;
-        Z.fx.dust(p.x, p.y, 4, '#cbb489'); Z.audio.sfx.flip();
+    if (p.onG || p.climbing) coyote = 0.1; else if (coyote > 0) coyote -= dt;
+    const canFlap = p.form === 'paper';
+    if (jbuf > 0 && ph.jump && (coyote > 0 || p.climbing || (canFlap && p.vy > -60))) {
+      p.vy = -ph.jump; jbuf = 0; coyote = 0; p.climbing = false;
+      Z.fx.dust(p.x, p.y, 4, '#cbb489'); Z.audio.sfx.flip();
+    }
+
+    // ---- gravity / glide / updraft / climb ----
+    if (p.climbing) {
+      p.vy = (Z.controls.held.up ? -150 : 0);
+    } else if (p.form === 'paper' && inUpdraft()) {
+      p.vy = Math.max(p.vy - 2400 * dt, -300);
+      if (Math.random() < 0.5) Z.fx.dust(p.x + U.rand(-12, 12), p.y - 10, 1, '#d7e3d0');
+    } else {
+      const cap = p.form === 'paper' ? (Z.controls.held.up ? ph.fall * 0.5 : ph.fall) : ph.fall;
+      p.vy = Math.min(p.vy + ph.grav * dt, cap);
+    }
+
+    // ---- integrate + resolve (real AABB) ----
+    const pw = ph.pw, phh = ph.ph;
+    const bl = blockers();
+    const prevBottom = p.y;
+    p.mover = null;
+
+    // X
+    p.x += p.vx * dt;
+    for (const b of bl) {
+      if (overlap(p.x - pw, p.y - phh, pw * 2, phh, b)) {
+        if (p.vx > 0) p.x = b.x - pw - 0.01;
+        else if (p.vx < 0) p.x = b.x + b.w + pw + 0.01;
+        else p.x = (p.x < b.x + b.w / 2) ? b.x - pw - 0.01 : b.x + b.w + pw + 0.01;
+        p.vx = 0;
       }
     }
-    // gravity (+ updraft for paper)
-    let grav = ph.grav;
-    if (p.form === 'paper' && inUpdraft()) { p.vy = Math.max(p.vy - 2200 * dt, -260); Z.fx.dust(p.x + U.rand(-10, 10), p.y, 1, '#e8d9b5'); }
-    else p.vy = Math.min(p.vy + grav * dt, ph.fall * (p.form === 'paper' && !Z.controls.held.up ? 1 : p.form === 'paper' ? 0.55 : 1));
 
-    // integrate + collide (simple AABB vs tiles)
-    const sz = ph.size, half = sz / 2;
-    const fellFrom = p.vy;
-    p.x += p.vx * dt;
-    if (p.vx > 0 && (solidAt(p.x + half, p.y - 6) || solidAt(p.x + half, p.y - sz + 4))) { p.x = Math.floor((p.x + half) / TILE) * TILE - half - 0.1; p.vx = 0; }
-    if (p.vx < 0 && (solidAt(p.x - half, p.y - 6) || solidAt(p.x - half, p.y - sz + 4))) { p.x = (Math.floor((p.x - half) / TILE) + 1) * TILE + half + 0.1; p.vx = 0; }
+    // Y
     p.y += p.vy * dt;
     p.onG = false;
-    if (p.vy > 0) {
-      const gy = p.y, feetSolid = solidAt(p.x - half * 0.7, gy, p.form) || solidAt(p.x + half * 0.7, gy, p.form);
-      const feetPlat = (platAt(p.x - half * 0.7, gy) || platAt(p.x + half * 0.7, gy)) && (gy % TILE) < 18;
-      if (feetSolid || feetPlat) {
-        p.y = Math.floor(gy / TILE) * TILE; p.vy = 0; p.onG = true;
-        if (fellFrom > 700) { Z.fx.dust(p.x, p.y, 6, '#cbb489'); Z.fx.addShake(p.form === 'rock' ? 5 : 2); if (p.form === 'rock') { smashBelow(); Z.audio.sfx.hammer(); } }
+    if (!p.climbing) {
+      for (const b of bl) {
+        if (!overlap(p.x - pw, p.y - phh, pw * 2, phh, b)) continue;
+        if (p.vy > 0) { land(b, prevBottom); }
+        else if (p.vy < 0) { p.y = b.y + b.h + phh + 0.01; p.vy = 0; }
       }
-    } else if (p.vy < 0) {
-      if (solidAt(p.x, p.y - sz)) { p.y = (Math.floor((p.y - sz) / TILE) + 1) * TILE + sz; p.vy = 0; }
+      // one-way platforms: only land when descending through the top edge
+      if (p.vy >= 0) {
+        for (const o of oneways) {
+          if (p.x + pw * 0.7 < o.x || p.x - pw * 0.7 > o.x + o.w) continue;
+          if (prevBottom <= o.y + 6 && p.y >= o.y && p.y <= o.y + o.h + 4) { land(o, prevBottom); p.mover = o.move ? o : null; }
+        }
+      }
     }
-    if (p.onG && p.form === 'rock') smashBelow();
-    p.walk = Math.abs(p.vx) > 20 && p.onG ? p.walk + dt : 0;
 
-    // hazards: spikes + falling out
-    const tc = at(Math.floor(p.x / TILE), Math.floor((p.y - 8) / TILE));
-    if (tc === '^' && p.form !== 'rock') return die('Spikes! Ouch.');
-    if (p.y > H0 * TILE + 200) return die('Long way down.');
+    p.walk = (Math.abs(p.vx) > 24 && p.onG) ? p.walk + dt : 0;
+    if (p.squash > 0) p.squash -= dt * 4;
 
-    // pickups
+    // ---- hazards ----
+    for (const hz of hazards) {
+      const inset = hz.kind === 'spike' ? 10 : 6;
+      if (overlap(p.x - pw * 0.6, p.y - phh * 0.7, pw * 1.2, phh * 0.7, { x: hz.x + inset, y: hz.y + inset, w: hz.w - inset * 2, h: hz.h - inset })) {
+        if (hz.kind === 'spike' && p.form === 'rock') continue;               // rock shrugs off spikes
+        if (hz.kind === 'steam' && !steamOn(hz)) continue;                    // steam pulses
+        return respawn(hz.kind === 'steam' ? 'Scalded by the vent.' : 'Impaled on the spikes.');
+      }
+    }
+    if (p.y > L.h + 240) return respawn('A long way down.');
+
+    // ---- checkpoints ----
+    for (const c of checkpoints) {
+      if (c.idx > reachedCp && p.x >= c.x) {
+        reachedCp = c.idx; cp = { x: c.x, y: c.y };
+        Z.fx.ring(c.x, c.y - 30, SPIRIT, 6, 60, 0.4); Z.audio.sfx.rank();
+      }
+    }
+
+    // ---- pickups ----
     for (const pk of pickups) {
       if (pk.got) continue;
-      if (Math.abs(pk.x - p.x) < 30 && Math.abs(pk.y - (p.y - 16)) < 34) {
+      if (Math.abs(pk.x - p.x) < 30 && Math.abs(pk.y - (p.y - phh * 0.5)) < 40) {
         pk.got = true; got.push(pk.kind);
         Z.fx.confetti(pk.x, pk.y, 8); Z.audio.sfx.found(pk.kind === 'part' ? 'rare' : 'common');
       }
     }
-    // guards: patrol + vision
+
+    // ---- guards ----
     if (alarmT > 0) alarmT -= dt;
     for (const g of guards) {
-      g.x += g.dir * 46 * dt;
+      g.x += g.dir * 52 * dt;
       if (g.x < g.x0) { g.x = g.x0; g.dir = 1; } if (g.x > g.x1) { g.x = g.x1; g.dir = -1; }
-      // vision cone: facing dir, 5 tiles, roughly same height band
-      const dx = p.x - g.x, dy = (p.y - 10) - (g.y - 26);
-      const inCone = Math.sign(dx) === g.dir && Math.abs(dx) < TILE * 4.6 && Math.abs(dy) < TILE * 1.4;
-      const hiddenRock = p.form === 'rock' && Math.abs(p.vx) < 12 && p.onG;
+      if (alarmT > 0) continue;
+      const dx = p.x - g.x, dy = (p.y - phh * 0.5) - (g.y - 34);
+      const inCone = Math.sign(dx) === g.dir && Math.abs(dx) < 300 && dx * g.dir > 20 && Math.abs(dy) < 78;
+      const hiddenRock = p.form === 'rock' && Math.abs(p.vx) < 14 && p.onG;
       if (inCone && !hiddenRock) {
-        deaths++;
-        Z.fx.screenFlash(0.4, '#c23b2f'); Z.fx.bigText('SPOTTED!', { color: '#ffb0a0', size: 34, ring: false, y: 0.3, dur: 0.9 });
+        Z.fx.screenFlash(0.4, '#c23b2f');
+        Z.fx.bigText('SPOTTED!', { color: '#ffb0a0', size: 34, ring: false, y: 0.3, dur: 0.9 });
         Z.audio.sfx.error();
-        p.x = p.spawn.x; p.y = p.spawn.y; p.vx = p.vy = 0; alarmT = 1;
-        return;
+        return respawn(null, true);
       }
     }
-    // exit
-    const ec = at(Math.floor(p.x / TILE), Math.floor((p.y - 10) / TILE));
-    if (ec === 'E') return finish();
-    camX = U.lerp(camX, U.clamp(p.x - Z.render.W / 2, 0, W0 * TILE - Z.render.W), Math.min(1, dt * 6));
-    camY = U.lerp(camY, U.clamp(p.y - Z.render.H * 0.62, -TILE * 2, Math.max(0, H0 * TILE - Z.render.H + TILE)), Math.min(1, dt * 6));
+
+    // ---- exit ----
+    const e = L.exit;
+    if (overlap(p.x - pw, p.y - phh, pw * 2, phh, e)) return finish();
+
+    // ---- camera ----
+    camX = U.lerp(camX, U.clamp(p.x - Z.render.W / 2, 0, Math.max(0, L.w - Z.render.W)), Math.min(1, dt * 6));
+    camY = U.lerp(camY, U.clamp(p.y - Z.render.H * 0.60, -40, Math.max(0, L.h - Z.render.H)), Math.min(1, dt * 6));
   }
-  function inUpdraft() { return at(Math.floor(p.x / TILE), Math.floor((p.y - 10) / TILE)) === 'U' || at(Math.floor(p.x / TILE), Math.floor((p.y - 40) / TILE)) === 'U'; }
-  function smashBelow() {
-    const tx = Math.floor(p.x / TILE), ty = Math.floor((p.y + 6) / TILE);
-    if (at(tx, ty) === 'C' && !broken[tx + ',' + ty]) {
-      broken[tx + ',' + ty] = true;
-      Z.fx.debris(tx * TILE + TILE / 2, ty * TILE + TILE / 2, 12, '#b0844f'); Z.fx.addShake(4); Z.audio.sfx.hammer();
+
+  function land(b, prevBottom) {
+    p.y = b.y; p.vy = 0; p.onG = true;
+    if (!p._wasG) { p.squash = Math.min(0.5, 0.14 + Math.abs(p._lastVy || 0) / 2600); Z.fx.dust(p.x, p.y, p.form === 'rock' ? 7 : 4, '#8a8172'); }
+    if ((p._lastVy || 0) > 700) { Z.fx.addShake(p.form === 'rock' ? 5 : 2); }
+    if (p.form === 'rock') smashCrates();
+  }
+
+  function startDash() { p.dashT = 0.2; Z.fx.speedLines(0.16, SPIRIT); Z.audio.sfx.boost(); }
+  function inUpdraft() {
+    for (const f of fans) if (p.x > f.x && p.x < f.x + f.w && p.y < f.y + f.h && p.y > f.y - 240) return true;
+    return false;
+  }
+  const steamOn = (hz) => (Math.sin(t * 2.2 + hz.x * 0.03) > -0.1);   // ~70% duty cycle
+  function smashCrates() {
+    const pw = PHYS[p.form].pw;
+    for (const c of crates) {
+      if (!c.alive) continue;
+      if (p.x + pw > c.x && p.x - pw < c.x + c.w && Math.abs(p.y - c.y) < 8) {
+        c.alive = false;
+        Z.fx.debris(c.x + c.w / 2, c.y + c.h / 2, 14, '#b0844f'); Z.fx.addShake(4); Z.audio.sfx.hammer();
+      }
     }
   }
   function cutFences() {
-    const tx = Math.floor((p.x + p.facing * 26) / TILE);
-    for (let dy = -1; dy <= 0; dy++) {
-      const ty = Math.floor((p.y - 10) / TILE) + dy;
-      if (at(tx, ty) === 'F' && !cut[tx + ',' + ty]) {
-        cut[tx + ',' + ty] = true;
-        Z.fx.sparks(tx * TILE + TILE / 2, ty * TILE + TILE / 2, 0, 10, SPIRIT, Math.PI, 260); Z.audio.sfx.hit(1);
+    const pw = PHYS[p.form].pw;
+    for (const f of fences) {
+      if (!f.alive) continue;
+      if (p.x + pw + 14 > f.x && p.x - pw - 14 < f.x + f.w && p.y > f.y - 4 && p.y - 44 < f.y + f.h) {
+        f.alive = false;
+        Z.fx.sparks(f.x + f.w / 2, f.y + f.h / 2, 0, 12, SPIRIT, Math.PI, 260); Z.audio.sfx.hit(1);
       }
     }
   }
-  function die(msg) {
-    deaths++; Z.fx.screenFlash(0.4, '#c23b2f'); Z.audio.sfx.error();
-    Z.ui.toast(msg, 'warn');
-    p.x = p.spawn.x; p.y = p.spawn.y; p.vx = p.vy = 0;
+  function respawn(msg, caught) {
+    deaths++;
+    Z.fx.screenFlash(0.4, '#c23b2f'); Z.audio.sfx.error();
+    if (msg) Z.ui.toast(msg, 'warn');
+    p.x = cp.x; p.y = cp.y; p.vx = p.vy = 0; p.dashT = 0; p.climbing = false; p.mover = null;
+    if (caught) alarmT = 1.1;
   }
+
   function finish() {
     mode = 'done'; doneT = 0;
-    const repeat = !!Z.state.campsDone[lvl.id];
-    Z.state.campsDone[lvl.id] = true;
-    // rewards: parts weighted at the camp's rarity floor
+    const repeat = !!Z.state.campsDone[L.id];
+    Z.state.campsDone[L.id] = true;
     const parts = [];
-    const n = repeat ? 1 : lvl.reward.parts + got.filter((k) => k === 'part').length;
-    const floor = D.rarityRank(lvl.reward.rarity);
+    const n = repeat ? 1 : L.reward.parts + got.filter((k) => k === 'part').length;
+    const floor = D.rarityRank(L.reward.rarity);
     for (let i = 0; i < n; i++) {
       const pool = D.parts.filter((x) => D.rarityRank(x.rarity) >= Math.max(0, floor - (i ? 1 : 0)));
       const part = U.weighted(pool, (x) => x.dropWeight + 4);
       Z.state.addItem(part.id, 1); parts.push(part);
     }
-    const scrap = (repeat ? 10 : lvl.reward.scrap) + got.filter((k) => k === 'scrap').length * 8;
+    const scrap = (repeat ? 10 : L.reward.scrap) + got.filter((k) => k === 'scrap').length * 8;
     Z.state.addScrap(scrap);
     Z.state.stats.rareFinds += parts.filter((x) => D.rarityRank(x.rarity) >= 2).length;
     Z.state.persist(); Z.quests.check();
     Z.fx.confetti(Z.render.W / 2, Z.render.H * 0.4, 40); Z.audio.sfx.win();
     Z.cutscene.play([
-      { who: 'HAUL', text: 'Slipped out with ' + parts.map((x) => x.name).join(', ') + ' and ' + scrap + ' scrap.' + (deaths ? ' Got caught ' + deaths + ' time' + (deaths > 1 ? 's' : '') + '. The tanuki forgives.' : ' A ghost. KANE-CO never knew.') },
+      { who: 'HAUL', text: 'Slipped out with ' + parts.map((x) => x.name).join(', ') + ' and ' + scrap + ' scrap.' + (deaths ? ' Reset ' + deaths + ' time' + (deaths > 1 ? 's' : '') + '. The tanuki forgives.' : ' A ghost in the depot. KANE-CO never knew.') },
     ], () => { mode = 'select'; document.getElementById('infilHud').style.display = 'none'; Z.controls.setMode('none'); renderSelect(); Z.ui.updateWallet(); });
   }
 
   // ================================================================
-  //  RENDER — layered forest, ink-silhouette terrain, soft light
+  //  RENDER
   // ================================================================
-  const hash2 = (x, y) => (((x * 73856093) ^ (y * 19349663)) >>> 0) % 100;
-  const isWall = (x, y) => x >= 0 && x < W0 && y >= 0 && y < H0 && grid[y][x] === '#';
-
-  // pre-render the static level silhouette (walls, ledges, thorns) once
-  function buildTerrain() {
-    const w = W0 * TILE, h = H0 * TILE;
-    terrainCv = document.createElement('canvas'); terrainCv.width = w; terrainCv.height = h;
-    const c = terrainCv.getContext('2d');
-    // merged wall runs, near-black with a cool vertical grade
-    for (let y = 0; y < H0; y++) {
-      let x = 0;
-      while (x < W0) {
-        if (grid[y][x] === '#') {
-          let x2 = x; while (x2 < W0 && grid[y][x2] === '#') x2++;
-          const g = c.createLinearGradient(0, y * TILE, 0, y * TILE + TILE);
-          g.addColorStop(0, '#141c21'); g.addColorStop(1, '#0b1115');
-          c.fillStyle = g; c.fillRect(x * TILE, y * TILE, (x2 - x) * TILE, TILE + 1);
-          x = x2;
-        } else x++;
-      }
-    }
-    // exposed-edge dressing: pale rim + grass on tops, vines under bottoms
-    for (let y = 0; y < H0; y++) for (let x = 0; x < W0; x++) {
-      if (grid[y][x] !== '#') continue;
-      const px = x * TILE, py = y * TILE, hs = hash2(x, y);
-      if (!isWall(x, y - 1)) {
-        c.strokeStyle = 'rgba(186,216,206,.38)'; c.lineWidth = 2;
-        c.beginPath(); c.moveTo(px + (isWall(x - 1, y) ? 0 : 2), py + 1); c.lineTo(px + TILE - (isWall(x + 1, y) ? 0 : 2), py + 1); c.stroke();
-        if (hs < 42) {                                     // grass tufts on some tops
-          c.strokeStyle = 'rgba(58,88,74,.9)'; c.lineWidth = 2; c.lineCap = 'round';
-          const n = 3 + hs % 3;
-          for (let k = 0; k < n; k++) {
-            const gx = px + 6 + (k + 0.5) * (TILE - 12) / n, gh = 7 + ((hs + k * 31) % 8), lean = ((hs + k * 17) % 7 - 3);
-            c.beginPath(); c.moveTo(gx, py + 2); c.quadraticCurveTo(gx + lean, py - gh * 0.6, gx + lean * 1.6, py - gh); c.stroke();
-          }
-        }
-      }
-      if (!isWall(x, y + 1) && y + 1 < H0 && hs > 68) {    // hanging vines
-        c.strokeStyle = 'rgba(40,62,54,.85)'; c.lineWidth = 2; c.lineCap = 'round';
-        const n = 1 + hs % 2;
-        for (let k = 0; k < n; k++) {
-          const vx = px + 8 + ((hs + k * 41) % (TILE - 16)), vl = 12 + ((hs * 7 + k * 13) % 22);
-          c.beginPath(); c.moveTo(vx, py + TILE - 1); c.quadraticCurveTo(vx + 4, py + TILE + vl * 0.6, vx - 2, py + TILE + vl); c.stroke();
-        }
-      }
-      if (!isWall(x - 1, y)) { c.strokeStyle = 'rgba(186,216,206,.12)'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(px + 1, py + 2); c.lineTo(px + 1, py + TILE - 2); c.stroke(); }
-    }
-    // one-way ledges: thin dark planks with a pale top edge
-    for (let y = 0; y < H0; y++) for (let x = 0; x < W0; x++) {
-      if (grid[y][x] !== '=') continue;
-      const px = x * TILE, py = y * TILE;
-      c.fillStyle = '#101820'; c.fillRect(px + 1, py + 4, TILE - 2, 11);
-      c.strokeStyle = 'rgba(186,216,206,.4)'; c.lineWidth = 2;
-      c.beginPath(); c.moveTo(px + 2, py + 5); c.lineTo(px + TILE - 2, py + 5); c.stroke();
-      c.strokeStyle = 'rgba(58,88,74,.7)'; c.beginPath(); c.moveTo(px + 6, py + 15); c.quadraticCurveTo(px + 9, py + 22, px + 5, py + 26); c.stroke();
-    }
-    // spikes: ink thorns with a pale gleam
-    for (let y = 0; y < H0; y++) for (let x = 0; x < W0; x++) {
-      if (grid[y][x] !== '^') continue;
-      const px = x * TILE, py = y * TILE;
-      for (let k = 0; k < 3; k++) {
-        const bx = px + k * (TILE / 3), tipX = bx + TILE / 6;
-        c.fillStyle = '#131b21';
-        c.beginPath(); c.moveTo(bx, py + TILE); c.lineTo(tipX, py + TILE - 21); c.lineTo(bx + TILE / 3, py + TILE); c.closePath(); c.fill();
-        c.strokeStyle = 'rgba(186,216,206,.35)'; c.lineWidth = 1.4;
-        c.beginPath(); c.moveTo(tipX, py + TILE - 21); c.lineTo(bx + 3, py + TILE); c.stroke();
-      }
-    }
-    // soft blurred copy for depth shadow
-    shadowCv = document.createElement('canvas'); shadowCv.width = w; shadowCv.height = h;
-    const s = shadowCv.getContext('2d');
-    s.filter = 'blur(6px)'; s.drawImage(terrainCv, 0, 0); s.filter = 'none';
-    s.globalCompositeOperation = 'source-in'; s.fillStyle = '#05090c'; s.fillRect(0, 0, w, h);
-  }
-
-  // far forest + wash + god rays + mist (screen space)
   function drawBackdrop(ctx, W, H, tt, scroll) {
-    const im = Z.assets.img('infil.forest');
-    if (im) {
-      const s = Math.max(W / im.naturalWidth, H / im.naturalHeight) * 1.12;
-      const dw = im.naturalWidth * s, dh = im.naturalHeight * s;
-      const ox = U.clamp(-(dw - W) * 0.5 - scroll * 0.12, -(dw - W), 0);
-      ctx.drawImage(im, ox, (H - dh) * 0.55, dw, dh);
-    } else {
-      const g = ctx.createLinearGradient(0, 0, 0, H);
-      g.addColorStop(0, '#18262a'); g.addColorStop(0.6, '#14201f'); g.addColorStop(1, '#0d1414');
-      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    }
-    ctx.fillStyle = 'rgba(14,28,32,.52)'; ctx.fillRect(0, 0, W, H);
-    // god rays
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#141c26'); g.addColorStop(0.5, '#1a2330'); g.addColorStop(1, '#0c1118');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    // sodium-lamp glows
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < 3; i++) {
-      const bx = W * (0.22 + i * 0.28) + Math.sin(tt * 0.12 + i * 2.1) * 40 - scroll * 0.05;
-      const rg = ctx.createLinearGradient(0, 0, 0, H);
-      rg.addColorStop(0, 'rgba(198,232,210,.10)'); rg.addColorStop(1, 'rgba(198,232,210,0)');
-      ctx.fillStyle = rg;
-      ctx.beginPath(); ctx.moveTo(bx - 14, -20); ctx.lineTo(bx + 26, -20);
-      ctx.lineTo(bx + 150, H); ctx.lineTo(bx - 90, H); ctx.closePath(); ctx.fill();
+      const bx = ((W * (0.2 + i * 0.34) - scroll * 0.08) % (W + 300) + (W + 300)) % (W + 300) - 150;
+      const by = H * (0.16 + (i % 2) * 0.08);
+      const rg = ctx.createRadialGradient(bx, by, 6, bx, by, 240);
+      rg.addColorStop(0, 'rgba(255,196,120,' + (0.12 + 0.03 * Math.sin(tt * 0.7 + i)) + ')');
+      rg.addColorStop(1, 'rgba(255,196,120,0)');
+      ctx.fillStyle = rg; ctx.fillRect(bx - 240, by - 240, 480, 480);
     }
     ctx.restore();
-    // low mist bands
-    for (let i = 0; i < 2; i++) {
-      const my = H * (0.58 + i * 0.2), mh = 90, pulse = 0.05 + 0.03 * Math.sin(tt * 0.3 + i * 2);
-      const mg = ctx.createLinearGradient(0, my, 0, my + mh);
-      mg.addColorStop(0, 'rgba(196,220,210,0)'); mg.addColorStop(0.5, 'rgba(196,220,210,' + pulse + ')'); mg.addColorStop(1, 'rgba(196,220,210,0)');
-      ctx.fillStyle = mg; ctx.fillRect(0, my, W, mh);
+    // haze band
+    ctx.fillStyle = 'rgba(20,32,44,.34)'; ctx.fillRect(0, H * 0.5, W, H * 0.5);
+    const mg = ctx.createLinearGradient(0, H * 0.44, 0, H * 0.72);
+    mg.addColorStop(0, 'rgba(150,178,196,0)'); mg.addColorStop(0.5, 'rgba(150,178,196,.05)'); mg.addColorStop(1, 'rgba(150,178,196,0)');
+    ctx.fillStyle = mg; ctx.fillRect(0, H * 0.44, W, H * 0.28);
+  }
+
+  // parallax decor (screen space; each object drifts by its par factor)
+  function drawDecor(ctx, W, H) {
+    for (const d of decor) {
+      const sx = d.x - camX * d.par, sy = d.y - camY * d.par;
+      if (sx > W + 40 || sx + d.w < -40) continue;
+      ctx.save(); ctx.globalAlpha = d.par < 0.5 ? 0.5 : d.par < 0.8 ? 0.72 : 0.95;
+      drawTile(ctx, d.tile, sx, sy, d.w, d.h);
+      ctx.restore();
     }
   }
 
-  // drifting spores (pooled, parallax 0.6)
-  function drawSpores(ctx, W, H, dt, scroll) {
-    if (!spores) { spores = []; for (let i = 0; i < 26; i++) spores.push({ x: Math.random() * (W + 80), y: Math.random() * H, vy: 8 + Math.random() * 16, ph: Math.random() * 6, r: 1.2 + Math.random() * 2 }); }
+  function drawMotes(ctx, W, H, dt) {
+    if (!motes) { motes = []; for (let i = 0; i < 30; i++) motes.push({ x: Math.random() * W, y: Math.random() * H, vy: 5 + Math.random() * 14, ph: Math.random() * 6, r: 0.8 + Math.random() * 1.8 }); }
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    for (const sp of spores) {
-      sp.ph += dt; sp.y -= sp.vy * dt;
-      if (sp.y < -12) { sp.y = H + 10; sp.x = Math.random() * (W + 80); }
-      const sx = ((sp.x - scroll * 0.6) % (W + 80) + (W + 80)) % (W + 80) - 40;
-      const a = 0.16 + 0.14 * Math.sin(sp.ph * 1.7);
-      ctx.fillStyle = 'rgba(190,228,206,' + a.toFixed(3) + ')';
-      ctx.beginPath(); ctx.arc(sx + Math.sin(sp.ph) * 9, sp.y, sp.r, 0, U.TAU); ctx.fill();
+    for (const m of motes) {
+      m.ph += dt; m.y += m.vy * dt * 0.4;
+      if (m.y > H + 10) { m.y = -8; m.x = Math.random() * W; }
+      const sx = ((m.x - camX * 0.5) % (W + 60) + (W + 60)) % (W + 60) - 30;
+      const a = 0.1 + 0.08 * Math.sin(m.ph * 1.6);
+      ctx.fillStyle = 'rgba(220,206,176,' + a.toFixed(3) + ')';
+      ctx.beginPath(); ctx.arc(sx + Math.sin(m.ph) * 8, m.y, m.r, 0, U.TAU); ctx.fill();
     }
     ctx.restore();
   }
 
-  // near-black fern silhouettes hugging the bottom corners
-  function drawFerns(ctx, W, H, tt) {
-    ctx.save(); ctx.fillStyle = '#070b0d'; ctx.strokeStyle = '#070b0d'; ctx.lineCap = 'round';
-    for (const side of [-1, 1]) {
-      const bx = side < 0 ? 0 : W, sway = Math.sin(tt * 0.7 + side) * 2;
-      for (let k = 0; k < 5; k++) {
-        const a = (k + 1) / 6 * Math.PI * 0.44, len = 66 + k * 14;
-        ctx.lineWidth = 10 - k;
-        ctx.beginPath(); ctx.moveTo(bx, H + 6);
-        ctx.quadraticCurveTo(bx - side * len * 0.5, H - len * 0.55 + sway, bx - side * len * Math.sin(a), H - len * Math.cos(a) * 0.9 + sway);
-        ctx.stroke();
+  function drawSolid(ctx, o) {
+    const na = o.w * aspect(o.tile);
+    if (na >= o.h - 2) { drawTile(ctx, o.tile, o.x, o.y, o.w, o.h); return; }
+    const g = ctx.createLinearGradient(0, o.y, 0, o.y + o.h);
+    g.addColorStop(0, '#5b5147'); g.addColorStop(1, '#2c2823');
+    ctx.fillStyle = g; ctx.fillRect(o.x, o.y, o.w, o.h);
+    drawTile(ctx, o.tile, o.x, o.y, o.w, na);   // textured cap on top
+  }
+
+  function drawExit(ctx, e, tt) {
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const cx = e.x + e.w / 2;
+    const glow = ctx.createRadialGradient(cx, e.y + e.h * 0.4, 6, cx, e.y + e.h * 0.4, e.w);
+    glow.addColorStop(0, 'rgba(150,230,207,' + (0.2 + 0.07 * Math.sin(tt * 2)) + ')'); glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = glow; ctx.fillRect(cx - e.w, e.y - e.h * 0.5, e.w * 2, e.h * 1.8); ctx.restore();
+    drawTile(ctx, e.tile, e.x, e.y, e.w, e.h);
+    // spirit-green seam of light down the shutter
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = 'rgba(150,230,207,.28)';
+    ctx.fillRect(cx - 5, e.y + 8, 10, e.h - 16); ctx.restore();
+    const bob = Math.sin(tt * 4) * 3;
+    Z.render.pxText(ctx, 'OUT', cx, e.y - 14 + bob, 10, SPIRIT, 'center');
+  }
+
+  function drawFan(ctx, f, tt) {
+    // updraft column
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const col = ctx.createLinearGradient(0, f.y - 230, 0, f.y);
+    col.addColorStop(0, 'rgba(150,210,230,0)'); col.addColorStop(1, 'rgba(150,210,230,.14)');
+    ctx.fillStyle = col; ctx.fillRect(f.x + 6, f.y - 230, f.w - 12, 230);
+    ctx.strokeStyle = 'rgba(190,224,240,.4)'; ctx.lineWidth = 2;
+    for (let i = 0; i < 4; i++) {
+      const yy = f.y - ((tt * 150 + i * 60) % 230);
+      const xx = f.x + f.w * (0.2 + 0.2 * i) + Math.sin(tt * 3 + i) * 8;
+      ctx.beginPath(); ctx.moveTo(xx, yy); ctx.lineTo(xx, yy - 18); ctx.stroke();
+    }
+    ctx.restore();
+    drawTile(ctx, f.tile, f.x, f.y, f.w, f.h);
+  }
+
+  function drawHazard(ctx, hz, tt) {
+    drawTile(ctx, hz.tile, hz.x, hz.y, hz.w, hz.h);
+    if (hz.kind === 'steam' && steamOn(hz)) {
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 3; i++) {
+        const yy = hz.y - ((tt * 90 + i * 34) % 90);
+        const a = 0.28 * (1 - ((tt * 90 + i * 34) % 90) / 90);
+        ctx.fillStyle = 'rgba(220,232,238,' + a.toFixed(3) + ')';
+        ctx.beginPath(); ctx.arc(hz.x + hz.w / 2 + Math.sin(tt * 3 + i) * 10, yy, 10, 0, U.TAU); ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  function drawGuard(ctx, g, tt) {
+    const warm = alarmT > 0 ? '255,110,90' : '255,214,150';
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    ctx.beginPath(); ctx.moveTo(g.x, g.y - 36);
+    ctx.lineTo(g.x + g.dir * 300, g.y - 36 - 70); ctx.lineTo(g.x + g.dir * 300, g.y - 36 + 70); ctx.closePath();
+    const cg = ctx.createLinearGradient(g.x, 0, g.x + g.dir * 300, 0);
+    cg.addColorStop(0, 'rgba(' + warm + ',.22)'); cg.addColorStop(1, 'rgba(' + warm + ',0)');
+    ctx.fillStyle = cg; ctx.fill();
+    const lg = ctx.createRadialGradient(g.x, g.y - 36, 2, g.x, g.y - 36, 42);
+    lg.addColorStop(0, 'rgba(' + warm + ',.26)'); lg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = lg; ctx.fillRect(g.x - 42, g.y - 78, 84, 84);
+    ctx.restore();
+    const bob = Math.sin(tt * 2.4 + g.ph) * 4;
+    ctx.save(); ctx.translate(g.x, g.y - 40 - bob); ctx.scale(g.dir, 1);
+    Z.render.paperFill(ctx, () => Z.render.roundRect(ctx, -13, -20, 26, 32, 7), '#5c6472', { noShadow: true, cut: 3 });
+    Z.render.paperFill(ctx, () => Z.render.roundRect(ctx, -9, -34, 18, 15, 5), '#79828f', { noShadow: true, cut: 2.6 });
+    ctx.fillStyle = alarmT > 0 ? '#ff5a4a' : '#ffd27a'; ctx.beginPath(); ctx.arc(3, -26, 3, 0, U.TAU); ctx.fill();
+    // hover thrusters
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = 'rgba(150,210,240,.5)';
+    ctx.beginPath(); ctx.ellipse(-6, 14, 4, 7 + Math.sin(tt * 20) * 2, 0, 0, U.TAU); ctx.ellipse(6, 14, 4, 7 + Math.cos(tt * 20) * 2, 0, 0, U.TAU); ctx.fill();
+    ctx.restore();
+    ctx.restore();
+  }
+
+  function drawPickups(ctx, tt) {
+    for (const pk of pickups) {
+      if (pk.got) continue;
+      const bob = Math.sin(tt * 3 + pk.x) * 5;
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      const gg = ctx.createRadialGradient(pk.x, pk.y + bob, 2, pk.x, pk.y + bob, 34);
+      gg.addColorStop(0, U.rgba(pk.kind === 'part' ? GOLD : SPIRIT, 0.34)); gg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = gg; ctx.fillRect(pk.x - 34, pk.y + bob - 34, 68, 68); ctx.restore();
+      if (pk.kind === 'part') {
+        Z.render.paperFill(ctx, () => Z.render.roundRect(ctx, pk.x - 12, pk.y - 12 + bob, 24, 24, 6), GOLD, { noShadow: true, cut: 2.6 });
+        ctx.fillStyle = '#5b4a2a'; ctx.beginPath(); ctx.arc(pk.x, pk.y + bob, 4, 0, U.TAU); ctx.fill();   // core bolt
+      } else {
+        Z.render.paperFill(ctx, () => { ctx.beginPath(); ctx.arc(pk.x, pk.y + bob, 9, 0, U.TAU); }, '#b3a890', { noShadow: true, cut: 2.6 });
       }
     }
+  }
+
+  function drawPlayer(ctx, tt) {
+    const px = p.x, py = p.y, ph = PHYS[p.form];
+    const gliding = p.form === 'paper' && !p.onG;
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const rr = gliding ? 46 : 30;
+    const rl = ctx.createRadialGradient(px, py - 20, 2, px, py - 20, rr);
+    rl.addColorStop(0, 'rgba(170,225,205,' + (gliding ? 0.22 : 0.1) + ')'); rl.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = rl; ctx.fillRect(px - rr, py - 20 - rr, rr * 2, rr * 2);
+    ctx.restore();
+    if (formPoof > 0) { ctx.save(); ctx.globalAlpha = formPoof * 2; ctx.fillStyle = '#f5ecd7'; ctx.beginPath(); ctx.arc(px, py - 22, 30 * (1 - formPoof), 0, U.TAU); ctx.fill(); ctx.restore(); }
+
+    if (p.form === 'tanuki') {
+      const moving = Math.abs(p.vx) > 24 && p.onG;
+      Z.render.drawSprite('char.tanuki', px, py, { w: 62, facing: p.facing, bob: 0, squash: p.onG ? (p.squash > 0 ? -p.squash : Math.cos(p.walk * 18) * 0.04) : -0.06, anim: !p.onG ? 'jump' : moving ? 'walk' : 'idle', animT: moving ? p.walk : tt });
+    } else if (p.form === 'rock') {
+      const sq = 1 + (p.squash > 0 ? p.squash : 0);
+      ctx.save(); ctx.translate(px, py); ctx.scale(1 / sq, sq);
+      Z.render.paperFill(ctx, () => { ctx.beginPath(); ctx.moveTo(-19, 0); ctx.lineTo(-15, -26); ctx.lineTo(0, -34); ctx.lineTo(17, -24); ctx.lineTo(20, 0); ctx.closePath(); }, '#8f8577', { cut: 4 });
+      ctx.strokeStyle = 'rgba(30,26,20,.4)'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(-8, -8); ctx.lineTo(2, -20); ctx.moveTo(6, -6); ctx.lineTo(12, -18); ctx.stroke();
+      ctx.restore();
+      drawFace(ctx, px, py - 16, p.facing);
+    } else if (p.form === 'paper') {
+      const tilt = U.clamp(p.vy * 0.0006, -0.32, 0.34) * p.facing + (p.onG ? 0 : Math.sin(tt * 6) * 0.05);
+      Z.render.drawGlide(px, py - ph.ph * 0.5, { w: 118, facing: p.facing, animT: tt, tilt: tilt });
+    } else { // scissors
+      ctx.save(); ctx.translate(px, py - 18); ctx.scale(p.facing, 1); ctx.rotate(p.dashT > 0 ? -0.4 : Math.sin(tt * 6) * 0.08);
+      Z.render.paperFill(ctx, () => { ctx.beginPath(); ctx.moveTo(-4, 2); ctx.lineTo(22, -9); ctx.lineTo(-2, -4); ctx.closePath(); }, '#b8c0c8', { noShadow: true, cut: 2.6 });
+      Z.render.paperFill(ctx, () => { ctx.beginPath(); ctx.moveTo(-4, -9); ctx.lineTo(22, 2); ctx.lineTo(-2, -2); ctx.closePath(); }, '#cfd6dd', { noShadow: true, cut: 2.6 });
+      Z.render.paperFill(ctx, () => { ctx.beginPath(); ctx.arc(-9, -11, 7, 0, U.TAU); }, '#c0392b', { noShadow: true, cut: 2.6 });
+      Z.render.paperFill(ctx, () => { ctx.beginPath(); ctx.arc(-9, 5, 7, 0, U.TAU); }, '#c0392b', { noShadow: true, cut: 2.6 });
+      drawFace(ctx, -9, -3, 1);
+      ctx.restore();
+    }
+  }
+  function drawFace(ctx, x, y, facing) {
+    ctx.save(); ctx.translate(x, y); ctx.scale(facing < 0 ? -1 : 1, 1);
+    ctx.fillStyle = '#2f2418';
+    ctx.beginPath(); ctx.arc(-4, -2, 2, 0, U.TAU); ctx.arc(4, -2, 2, 0, U.TAU); ctx.fill();
+    ctx.strokeStyle = '#2f2418'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(0, 2, 3, 0.3, Math.PI - 0.3); ctx.stroke();
     ctx.restore();
   }
 
   function frame(dt, tt) {
     const ctx = Z.render.ctx, W = Z.render.W, H = Z.render.H;
     Z.render.clear();
-    drawBackdrop(ctx, W, H, tt, mode === 'play' ? camX : tt * 14);
-    if (mode === 'select') { drawSpores(ctx, W, H, dt, 0); return; }
+    drawBackdrop(ctx, W, H, tt, mode === 'play' ? camX : tt * 20);
+    if (mode === 'select') { drawMotes(ctx, W, H, dt); return; }
 
+    p._wasG = p.onG; p._lastVy = p.vy;
     update(dt);
 
-    ctx.save(); ctx.translate(-camX | 0, -camY | 0);
-    if (shadowCv) { ctx.save(); ctx.globalAlpha = 0.55; ctx.drawImage(shadowCv, 5, 9); ctx.restore(); }
-    if (terrainCv) ctx.drawImage(terrainCv, 0, 0);
-    // dynamic tiles only (breakables, fences, vents, exit)
-    for (let y = 0; y < H0; y++) for (let x = 0; x < W0; x++) {
-      const c = grid[y][x], px = x * TILE, py = y * TILE;
-      if (px - camX < -TILE || px - camX > W + TILE || py - camY < -TILE || py - camY > H + TILE) continue;
-      if (c === 'C') { if (!broken[x + ',' + y]) drawCracked(ctx, px, py); }
-      else if (c === 'F') { if (!cut[x + ',' + y]) drawFence(ctx, px, py); }
-      else if (c === 'U') { drawVent(ctx, px, py, tt); }
-      else if (c === 'E') { drawExit(ctx, px, py, tt); }
-    }
-    // pickups: warm focal glints in the gloom
-    for (const pk of pickups) {
-      if (pk.got) continue;
-      const bob = Math.sin(tt * 3 + pk.x) * 5;
-      ctx.save(); ctx.globalCompositeOperation = 'lighter';
-      const gg = ctx.createRadialGradient(pk.x, pk.y + bob, 2, pk.x, pk.y + bob, 34);
-      gg.addColorStop(0, U.rgba(GOLD, 0.34)); gg.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = gg; ctx.fillRect(pk.x - 34, pk.y + bob - 34, 68, 68); ctx.restore();
-      if (pk.kind === 'part') Z.render.paperFill(ctx, () => Z.render.roundRect(ctx, pk.x - 12, pk.y - 12 + bob, 24, 24, 6), GOLD, { noShadow: true, cut: 2.6 });
-      else Z.render.paperFill(ctx, () => { ctx.beginPath(); ctx.arc(pk.x, pk.y + bob, 9, 0, U.TAU); }, '#b3a890', { noShadow: true, cut: 2.6 });
-    }
-    for (const gd of guards) drawGuard(ctx, gd, tt);
+    drawDecor(ctx, W, H);
+
+    ctx.save(); ctx.translate((-camX + Z.fx.shakeX) | 0, (-camY + Z.fx.shakeY) | 0);
+    // ground shadow pass
+    for (const o of solids) { ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = '#05090c'; ctx.fillRect(o.x + 5, o.y + 8, o.w, o.h); ctx.restore(); }
+    for (const o of solids) drawSolid(ctx, o);
+    for (const ld of ladders) drawTile(ctx, ld.tile, ld.x, ld.y, ld.w, ld.h);
+    for (const o of oneways) drawTile(ctx, o.tile, o.x, o.y, o.w, o.h);
+    for (const f of fans) drawFan(ctx, f, tt);
+    for (const hz of hazards) drawHazard(ctx, hz, tt);
+    for (const c of crates) if (c.alive) drawTile(ctx, c.tile, c.x, c.y, c.w, c.h);
+    for (const f of fences) if (f.alive) drawTile(ctx, f.tile, f.x, f.y, f.w, f.h);
+    drawExit(ctx, L.exit, tt);
+    drawPickups(ctx, tt);
+    for (const g of guards) drawGuard(ctx, g, tt);
     drawPlayer(ctx, tt);
+    Z.fx.render(ctx);
     ctx.restore();
 
-    drawSpores(ctx, W, H, dt, camX);
-    drawFerns(ctx, W, H, tt);
-    // quiet HUD, no boxes
-    Z.render.pxText(ctx, FORM_LABEL[p ? p.form : 'tanuki'], 18, H - 22, 12, SPIRIT, 'left');
-    if (deaths) Z.render.pxText(ctx, 'caught x' + deaths, 18, H - 46, 9, '#ffb0a0', 'left');
-  }
-
-  function drawCracked(ctx, px, py) {
-    // smashable stone block: lighter than the terrain, visibly fractured
-    const g = ctx.createLinearGradient(0, py, 0, py + TILE);
-    g.addColorStop(0, '#26323a'); g.addColorStop(1, '#18222a');
-    ctx.fillStyle = g; ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
-    ctx.strokeStyle = 'rgba(186,216,206,.32)'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(px + 3, py + 2); ctx.lineTo(px + TILE - 3, py + 2); ctx.stroke();
-    ctx.strokeStyle = 'rgba(10,16,20,.9)'; ctx.lineWidth = 2; ctx.lineJoin = 'round';
-    ctx.beginPath(); ctx.moveTo(px + 10, py + 6); ctx.lineTo(px + TILE / 2, py + TILE / 2); ctx.lineTo(px + 12, py + TILE - 6);
-    ctx.moveTo(px + TILE / 2, py + TILE / 2); ctx.lineTo(px + TILE - 8, py + TILE - 12); ctx.stroke();
-  }
-  function drawFence(ctx, px, py) {
-    ctx.save();
-    ctx.strokeStyle = 'rgba(150,172,182,.85)'; ctx.lineWidth = 2.4;
-    for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(px + 8 + i * 14, py); ctx.lineTo(px + 8 + i * 14, py + TILE); ctx.stroke(); }
-    ctx.strokeStyle = 'rgba(94,112,122,.9)'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(px, py + 8); ctx.lineTo(px + TILE, py + 8); ctx.moveTo(px, py + TILE - 8); ctx.lineTo(px + TILE, py + TILE - 8); ctx.stroke();
-    ctx.fillStyle = 'rgba(210,230,235,.5)';
-    ctx.fillRect(px + 7, py + 7, 3, 3); ctx.fillRect(px + 35, py + TILE - 9, 3, 3);
-    ctx.restore();
-  }
-  function drawVent(ctx, px, py, tt) {
-    ctx.save(); ctx.globalAlpha = 0.4;
-    for (let i = 0; i < 3; i++) {
-      const yy = py + TILE - ((tt * 60 + i * 26) % (TILE * 1.4));
-      ctx.strokeStyle = '#bfe3d2'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(px + TILE / 2 + Math.sin(tt * 3 + i) * 8, yy, 8, 0.4, Math.PI - 0.4); ctx.stroke();
-    }
-    ctx.restore();
-  }
-  function drawExit(ctx, px, py, tt) {
-    // old shrine doorway: dark frame, warm light spilling out
-    ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    const glow = ctx.createRadialGradient(px + TILE / 2, py, 4, px + TILE / 2, py, TILE * 1.6);
-    glow.addColorStop(0, 'rgba(255,214,150,' + (0.22 + 0.08 * Math.sin(tt * 2)) + ')'); glow.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = glow; ctx.fillRect(px - TILE * 1.5, py - TILE * 1.6, TILE * 4, TILE * 3.2); ctx.restore();
-    ctx.fillStyle = '#0c1216';
-    ctx.fillRect(px - 6, py - TILE, 10, TILE * 2); ctx.fillRect(px + TILE - 4, py - TILE, 10, TILE * 2);
-    ctx.fillRect(px - 12, py - TILE - 8, TILE + 24, 10);
-    const dg = ctx.createLinearGradient(0, py - TILE, 0, py + TILE);
-    dg.addColorStop(0, 'rgba(255,220,160,.55)'); dg.addColorStop(1, 'rgba(255,190,120,.2)');
-    ctx.fillStyle = dg; ctx.fillRect(px + 4, py - TILE + 2, TILE - 8, TILE * 2 - 2);
-    const bob = Math.sin(tt * 4) * 3;
-    Z.render.pxText(ctx, 'OUT', px + TILE / 2, py - TILE - 16 + bob, 9, GOLD, 'center');
-  }
-  function drawGuard(ctx, g, tt) {
-    // lantern-light vision cone (warm; red while alarmed)
-    const warm = alarmT > 0 ? '255,110,90' : '255,220,150';
-    ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    const cg = ctx.createLinearGradient(g.x, 0, g.x + g.dir * TILE * 4.6, 0);
-    cg.addColorStop(0, 'rgba(' + warm + ',.24)'); cg.addColorStop(1, 'rgba(' + warm + ',0)');
-    ctx.fillStyle = cg;
-    ctx.beginPath(); ctx.moveTo(g.x, g.y - 30);
-    ctx.lineTo(g.x + g.dir * TILE * 4.6, g.y - 30 - TILE * 1.2); ctx.lineTo(g.x + g.dir * TILE * 4.6, g.y - 30 + TILE * 1.2);
-    ctx.closePath(); ctx.fill();
-    const lg = ctx.createRadialGradient(g.x, g.y - 30, 2, g.x, g.y - 30, 40);
-    lg.addColorStop(0, 'rgba(' + warm + ',.25)'); lg.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = lg; ctx.fillRect(g.x - 40, g.y - 70, 80, 80);
-    ctx.restore();
-    // drone body (hovering suit)
-    const bob = Math.sin(tt * 2.4 + g.ph) * 4;
-    ctx.save(); ctx.translate(g.x, g.y - 34 - bob); ctx.scale(g.dir, 1);
-    Z.render.paperFill(ctx, () => Z.render.roundRect(ctx, -13, -20, 26, 34, 7), '#5c6472', { noShadow: true, cut: 3 });
-    Z.render.paperFill(ctx, () => Z.render.roundRect(ctx, -9, -35, 18, 16, 5), '#77808f', { noShadow: true, cut: 2.6 });
-    ctx.fillStyle = '#ff5a4a'; ctx.beginPath(); ctx.arc(3, -27, 3, 0, U.TAU); ctx.fill();
-    ctx.fillStyle = '#2c3340'; ctx.fillRect(-3, -8, 6, 12);
-    ctx.restore();
-  }
-  function drawPlayer(ctx, tt) {
-    const px = p.x, py = p.y;
-    // cool rim glow so the little spirit reads against the ink
-    ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    const gliding = p.form === 'paper' && !p.onG;
-    const rr = gliding ? 46 : 30;
-    const rl = ctx.createRadialGradient(px, py - 18, 2, px, py - 18, rr);
-    rl.addColorStop(0, 'rgba(170,225,205,' + (gliding ? 0.22 : 0.1) + ')'); rl.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = rl; ctx.fillRect(px - rr, py - 18 - rr, rr * 2, rr * 2);
-    ctx.restore();
-    if (formPoof > 0) { ctx.save(); ctx.globalAlpha = formPoof * 2; ctx.fillStyle = '#f5ecd7'; ctx.beginPath(); ctx.arc(px, py - 20, 30 * (1 - formPoof), 0, U.TAU); ctx.fill(); ctx.restore(); }
-    if (p.form === 'tanuki') {
-      const moving = Math.abs(p.vx) > 20 && p.onG;
-      Z.render.drawSprite('char.tanuki', px, py, { w: 66, facing: p.facing, bob: 0, squash: p.onG ? Math.cos(p.walk * 18) * 0.04 : -0.06, anim: !p.onG ? 'jump' : moving ? 'walk' : 'idle', animT: moving ? p.walk : tt });
-    } else if (p.form === 'rock') {
-      Z.render.paperFill(ctx, () => { ctx.beginPath(); ctx.moveTo(px - 17, py); ctx.lineTo(px - 13, py - 24); ctx.lineTo(px + 2, py - 30); ctx.lineTo(px + 16, py - 20); ctx.lineTo(px + 17, py); ctx.closePath(); }, '#8f8577', { cut: 4 });
-      drawFace(ctx, px, py - 16);
-    } else if (p.form === 'paper') {
-      const flut = Math.sin(tt * 8) * 0.16;
-      ctx.save(); ctx.translate(px, py - 16); ctx.rotate(flut);
-      Z.render.paperFill(ctx, () => Z.render.roundRect(ctx, -13, -17, 26, 34, 3), '#faf3e3', { cut: 3 });
-      ctx.strokeStyle = 'rgba(47,36,24,.25)'; ctx.lineWidth = 1.6;
-      ctx.beginPath(); ctx.moveTo(-8, -8); ctx.lineTo(8, -8); ctx.moveTo(-8, 0); ctx.lineTo(8, 0); ctx.stroke();
-      drawFace(ctx, 0, 6);
-      ctx.restore();
-    } else { // scissors
-      ctx.save(); ctx.translate(px, py - 16); ctx.scale(p.facing, 1); ctx.rotate(p.dashT > 0 ? -0.4 : Math.sin(tt * 5) * 0.08);
-      Z.render.paperFill(ctx, () => { ctx.beginPath(); ctx.moveTo(-4, 2); ctx.lineTo(20, -8); ctx.lineTo(-2, -4); ctx.closePath(); }, '#b8c0c8', { noShadow: true, cut: 2.6 });
-      Z.render.paperFill(ctx, () => { ctx.beginPath(); ctx.moveTo(-4, -8); ctx.lineTo(20, 2); ctx.lineTo(-2, -2); ctx.closePath(); }, '#cfd6dd', { noShadow: true, cut: 2.6 });
-      Z.render.paperFill(ctx, () => { ctx.beginPath(); ctx.arc(-8, -10, 7, 0, U.TAU); }, '#c0392b', { noShadow: true, cut: 2.6 });
-      Z.render.paperFill(ctx, () => { ctx.beginPath(); ctx.arc(-8, 4, 7, 0, U.TAU); }, '#c0392b', { noShadow: true, cut: 2.6 });
-      drawFace(ctx, -8, 0);
-      ctx.restore();
-    }
-  }
-  function drawFace(ctx, x, y) {
-    ctx.fillStyle = '#2f2418';
-    ctx.beginPath(); ctx.arc(x - 4, y - 2, 2, 0, U.TAU); ctx.arc(x + 4, y - 2, 2, 0, U.TAU); ctx.fill();
-    ctx.strokeStyle = '#2f2418'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(x, y + 2, 3, 0.3, Math.PI - 0.3); ctx.stroke();
+    drawMotes(ctx, W, H, dt);
+    Z.fx.renderScreen(ctx, W, H);
+    // quiet HUD
+    Z.render.pxText(ctx, FORM_LABEL[p.form], 18, H - 22, 12, SPIRIT, 'left');
+    Z.render.pxText(ctx, 'SKILL: form   J: dash (scissors)', 18, H - 42, 8, 'rgba(180,200,196,.7)', 'left');
+    if (deaths) Z.render.pxText(ctx, 'resets x' + deaths, W - 18, H - 22, 9, '#ffb0a0', 'right');
   }
 
   function enter() { mode = 'select'; document.getElementById('infilHud').style.display = 'none'; renderSelect(); }

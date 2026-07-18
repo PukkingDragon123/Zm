@@ -1,8 +1,9 @@
 /* ================================================================
-   combat.js — THE DOHYO. Side-view spirit-puppet duels at the
-   burning shrine. Yokai puppeteers channel spirit strings into
-   humanoid wood-and-rune puppets. Move, JUMP, HIT, SKILL, BLOCK.
-   Missions run in WAVES with a crew partner supporting you.
+   combat.js — THE DOHYO. Side-view gunpla MECH duels at the burning
+   shrine. The tanuki pilots a small gundam-style frame: reactor core,
+   servos, thrusters, beam saber. Move, BOOST/FLY, HIT (M1 combo),
+   SKILL (weapon special), BLOCK (guard). Missions run in WAVES with
+   a crew partner supporting you.
    ================================================================ */
 Z.combat = (function () {
   const U = Z.util, D = Z.data, PAL = Z.data.PAL;
@@ -25,12 +26,23 @@ Z.combat = (function () {
     flamer:  { reach: 82, dmgMul: 0.42, cd: 0.28, kb: 24,  active: 0.22, ecost: 4, hitstop: 0,    shake: 1,   launch: 0 },
     none:    { reach: 42, dmgMul: 0.6,  cd: 0.55, kb: 130, active: 0.16, ecost: 1, hitstop: 0.03, shake: 1.6, launch: 0 },
   };
+  // weapon-flavoured SKILL specials (K). multi = continuous multi-hit beam/spray.
+  const SKILL = {
+    blade:   { name: 'BEAM SLASH',    dmgMul: 2.4, reachAdd: 28, active: 0.20, kb: 260, launch: 120, dash: 360, leap: 0,   cost: 32, cd: 2.8, multi: false, hitstop: 0.12, shake: 6 },
+    spinner: { name: 'GATLING SPRAY', dmgMul: 1.9, reachAdd: 16, active: 0.55, kb: 60,  launch: 0,   dash: 120, leap: 0,   cost: 34, cd: 3.8, multi: true,  hitstop: 0.0,  shake: 2 },
+    hammer:  { name: 'HEAT SMASH',    dmgMul: 2.7, reachAdd: 22, active: 0.32, kb: 220, launch: 80,  dash: 200, leap: 280, cost: 40, cd: 4.4, multi: false, hitstop: 0.16, shake: 9 },
+    flipper: { name: 'SHIELD BASH',   dmgMul: 1.6, reachAdd: 18, active: 0.22, kb: 300, launch: 520, dash: 300, leap: 0,   cost: 36, cd: 4.0, multi: false, hitstop: 0.12, shake: 7 },
+    flamer:  { name: 'BEAM CANNON',   dmgMul: 2.2, reachAdd: 64, active: 0.50, kb: 40,  launch: 0,   dash: 0,   leap: 0,   cost: 40, cd: 4.2, multi: true,  hitstop: 0.0,  shake: 3 },
+    none:    { name: 'OVERDRIVE',     dmgMul: 2.2, reachAdd: 22, active: 0.20, kb: 240, launch: 120, dash: 300, leap: 0,   cost: 30, cd: 3.2, multi: false, hitstop: 0.12, shake: 6 },
+  };
   const primaryWeapon = (spec) => (spec.weapons && spec.weapons[0]) ? spec.weapons[0].type : 'none';
 
   function makeFighter(spec, isPlayer) {
     const wtype = primaryWeapon(spec), w = spec.weapons && spec.weapons[0];
     return {
       spec, isPlayer, wtype, prof: PROF[wtype] || PROF.none,
+      skillSpec: SKILL[wtype] || SKILL.none,
+      accent: spec.accent || (isPlayer ? SPIRIT : '#ff6a4a'),
       wdmg: (w && w.damage) || 0,
       x: 0, y: 0, vx: 0, vy: 0, facing: isPlayer ? 1 : -1,
       hp: spec.maxHp, maxHp: spec.maxHp,
@@ -38,10 +50,11 @@ Z.combat = (function () {
       moveSpeed: U.clamp(120 + spec.speedStat * 2.3, 120, 460),
       power: spec.power, armor: spec.armor, halfW: spec.radius * 1.15,
       atkCd: 0, atkActive: 0, atkHit: false, atkKind: 'hit', atkAnim: 0,
-      skillCd: 0, skillCost: 34,
+      atkStep: 0, chainStep: 0, chainT: 0,
+      skillCd: 0,
       block: false, blockT0: -9, stun: 0, hitFlash: 0, moveInput: 0, dashT: 0,
-      jumps: 0, turn: 0, diving: false,
-      anim: { t: 0, spin: 0, wheel: 0, hammer: 0, flip: 0, moving: false, attackT: 0 },
+      jumps: 0, flyT: 0, turn: 0, diving: false,
+      anim: { t: 0, spin: 0, wheel: 0, hammer: 0, flip: 0, moving: false, attackT: 0, fly: false },
       aggr: spec.aggression != null ? spec.aggression : 0.6, arche: spec.archetype || 'allrounder', think: 0,
       damaged: false,
     };
@@ -90,6 +103,8 @@ Z.combat = (function () {
       f.anim.t = t; f.anim.spin += (f.wtype === 'spinner' ? 18 : 5) * realDt;
       f.anim.attackT = f.atkAnim; if (f.atkAnim > 0) f.atkAnim -= realDt * 3.4;
       if (f.turn > 0) f.turn -= realDt * 5;
+      if (f.chainT > 0) { f.chainT -= realDt; if (f.chainT <= 0) f.chainStep = 0; }
+      if (f.flyT > 0) f.flyT -= realDt;
     });
     opLeftPress = Math.max(0, opLeftPress - realDt * 3); opRightPress = Math.max(0, opRightPress - realDt * 3);
     crowdHype = Math.max(0, crowdHype - realDt);
@@ -136,10 +151,20 @@ Z.combat = (function () {
 
   function tryJump(f) {
     if (f.stun > 0 || f.block) return;
-    if (f.y <= 0) {
-      f.vy = 620; f.jumps = 1;
-      Z.fx.dust(f.x, stage.groundY, 5, '#cbb489'); Z.audio.sfx.flip();
+    if (f.y <= 1) {
+      // thruster liftoff — hold UP afterward to hover/fly
+      f.vy = 560; f.jumps = 1; f.flyT = 0.4;
+      Z.fx.dust(f.x, stage.groundY, 6, '#cbb489'); Z.audio.sfx.flip();
+      Z.fx.sparks(f.x, stage.groundY, Math.PI / 2, 5, f.accent, 0.7, 200);
       if (f.isPlayer) opLeftPress = 1;
+    } else if (f.jumps < 2 && f.energy >= 6 && !f.diving) {
+      // AIR-DASH / boost — burns a little reactor charge
+      f.jumps++; f.energy -= 6; f.flyT = 0.3;
+      const d = f.moveInput !== 0 ? Math.sign(f.moveInput) : f.facing;
+      f.vx = d * 540; f.vy = Math.max(f.vy, 90); f.dashT = 0.22;
+      Z.fx.speedLines(0.16, f.accent); Z.fx.sparks(f.x - d * f.halfW, stage.groundY - f.y, d > 0 ? Math.PI : 0, 8, f.accent, 0.8, 300);
+      Z.audio.sfx.boost();
+      if (f.isPlayer) opLeftPress = 1; else opRightPress = 1;
     }
   }
 
@@ -154,8 +179,18 @@ Z.combat = (function () {
     f.anim.wheel += Math.abs(f.vx) * dt / 26 * (f.moveInput >= 0 ? 1 : 1);
     if (f.dashT > 0) f.dashT -= dt;
     if (f.anim.moving && Math.random() < 0.2) Z.fx.dust(f.x - f.facing * f.halfW * 0.5, stage.groundY, 1, '#cbb489');
+    // FLIGHT — player holds UP while airborne to fire thrusters and hover/rise
+    if (f.isPlayer && phase === 'fight' && f.y > 2 && !f.diving && f.stun <= 0 && Z.controls.held.up && f.energy > 0) {
+      f.vy += 1660 * dt;                 // counter most of gravity -> brief flight
+      if (f.vy > 250) f.vy = 250;        // ascent cap
+      f.energy = Math.max(0, f.energy - 11 * dt);
+      f.flyT = 0.14;
+      if (Math.random() < dt * 34) Z.fx.sparks(f.x - f.facing * 5, stage.groundY - f.y, Math.PI / 2, 1, f.accent, 0.5, 130);
+    }
     // vertical
     f.y += f.vy * dt; f.vy -= 1900 * dt;
+    const maxAlt = 172;
+    if (f.y > maxAlt) { f.y = maxAlt; if (f.vy > 0) f.vy = 0; }
     if (f.y <= 0) {
       if (f.diving) {
         f.diving = false;
@@ -175,6 +210,7 @@ Z.combat = (function () {
       f.y = 0; if (f.vy < 0) f.vy = 0;
     }
     if (f.landSquash > 0) f.landSquash -= dt * 2;
+    f.anim.fly = (f.y > 5) || (f.flyT > 0.03);      // light the thrusters + lift when airborne/boosting
     if (f.x < stage.left) { f.x = stage.left; if (f.vx < -160) { f.stun = Math.max(f.stun, 0.3); Z.fx.dust(f.x, stage.groundY, 4, '#cbb489'); Z.fx.addShake(2); } f.vx = 0; }
     if (f.x > stage.right) { f.x = stage.right; if (f.vx > 160) { f.stun = Math.max(f.stun, 0.3); Z.fx.dust(f.x, stage.groundY, 4, '#cbb489'); Z.fx.addShake(2); } f.vx = 0; }
     f.energy = Math.min(f.energyMax, f.energy + f.regen * dt);
@@ -199,88 +235,118 @@ Z.combat = (function () {
 
   function tryAttack(f, opp) {
     if (!opp || f.atkCd > 0 || f.stun > 0 || f.block) return;
-    if (f.y > 26 && !f.diving) {           // aerial: dive slam
+    if (f.y > 26 && !f.diving) {           // aerial: thruster dive-slam
       f.diving = true; f.vy = -980; f.vx += f.facing * 170;
       Z.fx.speedLines(0.18, GOLD); Z.audio.sfx.boost();
       if (f.isPlayer) opLeftPress = 1; else opRightPress = 1;
       return;
     }
-    f.atkKind = 'hit'; f.atkCd = f.prof.cd; f.atkActive = f.prof.active; f.atkHit = false; f.atkAnim = 1;
+    // M1 melee STRING: chain up to 3 hits with escalating knockback; the
+    // 3rd swing is a launcher. Whiff the timing window and the string resets.
+    f.chainStep = f.chainT > 0 ? Math.min(2, f.chainStep + 1) : 0;
+    f.chainT = 0.5; f.atkStep = f.chainStep;
+    f.atkKind = 'hit'; f.atkActive = f.prof.active + (f.chainStep === 2 ? 0.05 : 0);
+    f.atkCd = f.prof.cd * (f.chainStep < 2 ? 0.72 : 1.15);   // flows fast, recovers on the finisher
+    f.atkHit = false; f.atkAnim = 1;
     f.energy = Math.max(0, f.energy - f.prof.ecost);
     if (f.wtype === 'hammer') f.anim.hammer = 1; if (f.wtype === 'flipper') f.anim.flip = 1;
     if (f.isPlayer) opLeftPress = 1; else opRightPress = 1;
     if (f.wtype === 'hammer') Z.audio.sfx.hammer(); else if (f.wtype === 'flipper') Z.audio.sfx.flip(); else if (f.wtype === 'flamer') Z.audio.sfx.flame(); else Z.audio.sfx.boost();
   }
+  // SKILL (K) — a flashy weapon-flavoured special: beam slash / gatling
+  // spray / heat smash / shield bash / beam cannon, tinted the mech accent.
   function trySkill(f, opp) {
-    if (!opp || f.skillCd > 0 || f.stun > 0 || f.block || f.energy < f.skillCost) { if (f.isPlayer && f.energy < f.skillCost) Z.audio.sfx.error(); return; }
-    f.energy -= f.skillCost; f.skillCd = 3.5; f.atkKind = 'skill'; f.atkCd = f.prof.cd; f.atkActive = f.prof.active + 0.08; f.atkHit = false; f.atkAnim = 1;
-    f.vx += f.facing * 280; f.dashT = 0.22;
+    const sk = f.skillSpec;
+    if (!opp || f.skillCd > 0 || f.stun > 0 || f.block || f.energy < sk.cost) { if (f.isPlayer && f.energy < sk.cost) Z.audio.sfx.error(); return; }
+    f.energy -= sk.cost; f.skillCd = sk.cd;
+    f.atkKind = 'skill'; f.atkStep = 0; f.chainT = 0; f.chainStep = 0;
+    f.atkCd = Math.max(f.prof.cd, sk.active + 0.1); f.atkActive = sk.active; f.atkHit = false; f.atkAnim = 1;
+    if (sk.leap) { f.vy = Math.max(f.vy, sk.leap); f.jumps = 1; f.flyT = 0.5; }   // hammer leaps skyward
+    if (sk.dash) { f.vx += f.facing * sk.dash; f.dashT = 0.24; }
     if (f.wtype === 'hammer') f.anim.hammer = 1; if (f.wtype === 'flipper') f.anim.flip = 1;
     if (f.isPlayer) opLeftPress = 1; else opRightPress = 1;
-    const tx = f.x + f.facing * 34, ty = stage.groundY - f.spec.radius;
-    Z.fx.transmute(tx, ty, 74, f.isPlayer ? SPIRIT : '#ff9d7a', 0.8);
-    Z.fx.speedLines(0.28, SPIRIT); Z.fx.zoom(0.09, 0.36); Z.fx.screenFlash(0.28, SPIRIT);
-    if (f.isPlayer) Z.fx.bigText('SPIRIT BURST', { color: SPIRIT, size: 26, ring: false, y: 0.24, dur: 0.9 });
-    Z.fx.sparks(tx, ty, f.facing > 0 ? 0 : Math.PI, 12, SPIRIT, 0.8, 320);
+    const col = f.accent;
+    const tx = f.x + f.facing * 34, ty = stage.groundY - f.y - f.spec.radius;
+    Z.fx.transmute(tx, ty, 74, col, 0.8);
+    Z.fx.speedLines(0.3, col); Z.fx.zoom(0.1, 0.4); Z.fx.screenFlash(0.3, col);
+    if (f.isPlayer) Z.fx.bigText(sk.name, { color: col, size: 30, ring: true, ringColor: col, y: 0.24, dur: 1.0 });
+    // signature beam VFX per weapon type, in the mech accent colour
+    if (f.wtype === 'blade' || f.wtype === 'none') { Z.fx.lightning(f.x + f.facing * f.halfW, ty, tx + f.facing * 80, ty, col); Z.fx.sparks(tx, ty, f.facing > 0 ? 0 : Math.PI, 14, col, 0.7, 360); }
+    else if (f.wtype === 'flamer') { Z.fx.flame(tx, ty, f.facing > 0 ? 0 : Math.PI, col); Z.fx.lightning(f.x + f.facing * f.halfW, ty, tx + f.facing * sk.reachAdd, ty, col); }
+    else if (f.wtype === 'spinner') { Z.fx.sparks(tx, ty, f.facing > 0 ? 0 : Math.PI, 18, col, 1.1, 320); }
+    else { Z.fx.sparks(tx, ty, f.facing > 0 ? 0 : Math.PI, 12, col, 0.8, 320); }
+    if (f.wtype === 'hammer') Z.audio.sfx.hammer(); else if (f.wtype === 'flamer') Z.audio.sfx.flame();
     Z.audio.sfx.rank();
   }
 
-  function inRange(f, opp) {
-    const reach = f.prof.reach + f.halfW + opp.halfW;
+  function inRange(f, opp, extra) {
+    const reach = f.prof.reach + (extra || 0) + f.halfW + opp.halfW;
     const dx = (opp.x - f.x) * f.facing;
-    return dx > 0 && dx < reach && Math.abs(opp.y - f.y) < f.spec.radius * 1.5;
+    return dx > 0 && dx < reach && Math.abs(opp.y - f.y) < f.spec.radius * 1.7;
   }
+  const CHAIN_KB = [0.7, 1.0, 1.6];       // escalating knockback across the M1 string
   function swingHit(f, opp, dt) {
     if (!opp || f.atkActive <= 0) return;
-    const hittable = f.wtype === 'flamer' ? true : !f.atkHit;
-    if (!hittable || !inRange(f, opp)) return;
     const skill = f.atkKind === 'skill';
+    const sk = skill ? f.skillSpec : null;
+    const multiHit = (f.wtype === 'flamer' && !skill) || (skill && sk.multi);   // continuous beam/spray
+    const col = f.accent;
+    const hittable = multiHit ? true : !f.atkHit;
+    if (!hittable || !inRange(f, opp, skill ? sk.reachAdd : 0)) return;
     const blocked = opp.block;
-    // PERFECT PARRY: block raised within the last 0.2s deflects everything
-    if (blocked && f.wtype !== 'flamer' && (t - opp.blockT0) < 0.2) {
+    // PERFECT PARRY: guard raised within the last 0.2s deflects a discrete strike
+    if (blocked && !multiHit && (t - opp.blockT0) < 0.2) {
       f.atkHit = true;
       f.stun = Math.max(f.stun, 0.6); f.vx -= f.facing * 300; f.hitFlash = 0.1;
       opp.energy = Math.min(opp.energyMax, opp.energy + 16);
       const px = opp.x + opp.facing * opp.halfW, py = stage.groundY - opp.y - opp.spec.radius * 1.6;
       Z.fx.ring(px, py, SPIRIT, 6, 90, 0.34); Z.fx.sparks(px, py, -Math.PI / 2, 14, SPIRIT, 1.4, 340);
       Z.fx.doHitstop(0.1); Z.fx.addShake(3 * (Z.state.settings.shake ? 1 : 0.001));
-      Z.fx.bigText('PARRY!', { color: SPIRIT, size: 30, ring: false, y: 0.24, dur: 0.8 });
+      Z.fx.bigText('GUARD BREAK!', { color: SPIRIT, size: 30, ring: false, y: 0.24, dur: 0.8 });
       Z.audio.sfx.rank();
       crowdHype = Math.min(1.4, crowdHype + 0.7);
       return;
     }
+    const step = f.atkStep || 0;
     let dmg = (f.wdmg * f.prof.dmgMul + 4 + f.power * 0.14);
-    if (f.wtype === 'flamer') dmg *= dt * 8; else f.atkHit = true;
-    if (skill) dmg *= 2.3;
+    if (multiHit) dmg *= (skill ? sk.dmgMul : 1) * dt * (skill ? 12 : 8);
+    else { f.atkHit = true; if (skill) dmg *= sk.dmgMul; }
     // COUNTER: catching them mid-swing hits harder
     let countered = false;
-    if (!blocked && opp.atkActive > 0 && f.wtype !== 'flamer') { dmg *= 1.35; countered = true; }
+    if (!blocked && opp.atkActive > 0 && !multiHit) { dmg *= 1.35; countered = true; }
     dmg *= (1 - (opp.armor || 0) / 100) * (blocked ? 0.28 : 1);
     maybeFinish(f, opp, dmg);
     opp.hp -= dmg; if (opp.isPlayer) opp.damaged = true;
-    if (!blocked && f.wtype !== 'flamer') f.energy = Math.min(f.energyMax, f.energy + 3);   // aggression pays
-    const kb = (f.prof.kb + (skill ? 220 : 0)) * (blocked ? 0.3 : 1);
+    if (!blocked && !multiHit) f.energy = Math.min(f.energyMax, f.energy + 3);   // aggression pays
+    // knockback: skill uses its own kb; the M1 string escalates per chain step
+    const baseKb = skill ? sk.kb : f.prof.kb * (CHAIN_KB[step] || 1);
+    const kb = baseKb * (blocked ? 0.3 : 1);
     opp.vx += f.facing * kb;
-    const launch = (f.prof.launch + (skill ? 160 : 0)) * (blocked ? 0.2 : 1);
+    const baseLaunch = skill ? sk.launch : (f.prof.launch + (step === 2 ? 200 : 0));
+    const launch = baseLaunch * (blocked ? 0.2 : 1);
     if (launch) opp.vy += launch;
-    if (f.prof.hitstop || skill) opp.stun = Math.max(opp.stun, skill ? 0.35 : (f.wtype === 'hammer' || f.wtype === 'flipper' ? 0.25 : 0.06));
+    const stunAmt = multiHit ? 0.04 : (skill ? 0.35 : (step === 2 ? 0.3 : (f.wtype === 'hammer' || f.wtype === 'flipper' ? 0.25 : 0.06)));
+    if (stunAmt) opp.stun = Math.max(opp.stun, stunAmt);
     opp.hitFlash = 0.12;
     const hx = (f.x + opp.x) / 2, hy = stage.groundY - opp.y - f.spec.radius - 6;
-    if (f.wtype === 'flamer') Z.fx.flame(hx, hy, f.facing > 0 ? 0 : Math.PI, PAL.warn);
+    if (multiHit) { Z.fx.flame(hx, hy, f.facing > 0 ? 0 : Math.PI, col); if (skill) Z.fx.sparks(hx, hy, f.facing > 0 ? 0 : Math.PI, 4, col, 0.8, 300); }
     else {
-      Z.fx.sparks(hx, hy, f.facing > 0 ? 0.4 : Math.PI - 0.4, blocked ? 4 : (skill ? 16 : 8), blocked ? SPIRIT : '#ffe6b0', 1.2, 260 + f.prof.kb);
+      Z.fx.sparks(hx, hy, f.facing > 0 ? 0.4 : Math.PI - 0.4, blocked ? 4 : (skill ? 16 : (6 + step * 3)), blocked ? SPIRIT : col, 1.2, 260 + f.prof.kb);
       Z.fx.debris(hx, hy, skill ? 6 : 3, '#a9805a');
-      Z.fx.damage(hx, hy - 10, dmg, blocked ? SPIRIT : (skill ? SPIRIT : '#ffd98a'), skill || f.wtype === 'hammer');
+      Z.fx.damage(hx, hy - 10, dmg, blocked ? SPIRIT : (skill ? col : '#ffd98a'), skill || f.wtype === 'hammer' || step === 2);
     }
-    if (skill && !blocked) { Z.fx.lightning(f.x + f.facing * f.halfW, hy, opp.x, hy, SPIRIT); Z.fx.impact(hx, hy, SPIRIT); Z.fx.shockwave(hx, hy, SPIRIT, 160); Z.fx.transmute(opp.x, hy, 52, SPIRIT, 0.55); }
-    else if (f.wtype === 'hammer' && !blocked) { Z.fx.impact(hx, hy, GOLD); Z.fx.shockwave(hx, hy, GOLD, 110); }
-    if (countered) Z.fx.damage(hx, hy - 34, 0, GOLD, false), Z.fx.popText(hx, hy - 34, 'COUNTER', GOLD);
-    if (!blocked && f.wtype !== 'flamer') {
-      if (f.isPlayer) { comboN++; comboT = 1.3; if ([3, 5, 8, 12, 18].includes(comboN)) Z.fx.bigText(comboN + ' HIT COMBO', { color: GOLD, size: 22, ring: false, y: 0.17, dur: 0.8 }); }
+    if (skill && !blocked && !multiHit) { Z.fx.lightning(f.x + f.facing * f.halfW, hy, opp.x, hy, col); Z.fx.impact(hx, hy, col); Z.fx.shockwave(hx, hy, col, 160); Z.fx.transmute(opp.x, hy, 52, col, 0.55); }
+    else if (f.wtype === 'hammer' && !blocked && !skill) { Z.fx.impact(hx, hy, GOLD); Z.fx.shockwave(hx, hy, GOLD, 110); }
+    if (countered) { Z.fx.damage(hx, hy - 34, 0, GOLD, false); Z.fx.popText(hx, hy - 34, 'COUNTER', GOLD); }
+    if (!blocked && step === 2 && !skill && f.isPlayer) Z.fx.screenFlash(0.18, col);   // finisher pop
+    if (!blocked && !multiHit) {
+      if (f.isPlayer) { comboN++; comboT = 1.4; if ([3, 5, 8, 12, 18, 25].includes(comboN)) Z.fx.bigText(comboN + ' HIT COMBO', { color: GOLD, size: 22, ring: false, y: 0.15, dur: 0.8 }); }
       else { comboN = 0; comboT = 0; }
     }
-    const shk = (f.prof.shake + (skill ? 5 : 0)) * (Z.state.settings.shake ? 1 : 0.001);
-    Z.fx.addShake(shk); if (f.prof.hitstop || skill) Z.fx.doHitstop(skill ? 0.1 : f.prof.hitstop);
+    const shk = ((skill ? sk.shake : f.prof.shake + (step === 2 ? 2 : 0))) * (Z.state.settings.shake ? 1 : 0.001);
+    Z.fx.addShake(shk);
+    const hs = skill ? sk.hitstop : (f.prof.hitstop + (step === 2 ? 0.03 : 0));
+    if (hs) Z.fx.doHitstop(hs);
     crowdHype = Math.min(1.4, crowdHype + (skill ? 0.9 : f.prof.shake * 0.12));
     Z.audio.sfx.hit(U.clamp(dmg / 26, 0.4, 2));
   }
@@ -316,7 +382,7 @@ Z.combat = (function () {
     else if (dist < want - 34 && (f.arche === 'sniper' || f.arche === 'trickster')) move = -dir;
     f.moveInput = move;
     if (dist <= reach + 8 && f.atkCd <= 0 && f.think <= 0) {
-      if (f.skillCd <= 0 && f.energy >= f.skillCost && Math.random() < f.aggr * 0.4) trySkill(f, opp);
+      if (f.skillCd <= 0 && f.energy >= f.skillSpec.cost && Math.random() < f.aggr * 0.4) trySkill(f, opp);
       else tryAttack(f, opp);
       f.think = U.rand(0.15, 0.7) * (1.5 - f.aggr);
     }
@@ -354,7 +420,7 @@ Z.combat = (function () {
       P.hp = Math.min(P.maxHp, P.hp + heal);
       Z.fx.damage(P.x, stage.groundY - 80, heal, SPIRIT, true);
       Z.fx.transmute(P.x, stage.groundY - P.spec.radius, 60, SPIRIT, 0.7);
-      Z.ui.toast(partner.name + ' patches your puppet (+' + heal + ')', 'gold');
+      Z.ui.toast(partner.name + ' patches your frame (+' + heal + ')', 'gold');
     } else if (partner) { P.hp = Math.min(P.maxHp, P.hp + Math.round(P.maxHp * 0.04)); }
     matchT = Math.max(0, matchT - 20);     // bonus time per wave
     finisherFired = false; soul = null;
@@ -416,13 +482,13 @@ Z.combat = (function () {
       if (partner) rows.push([partner.name, friendUp ? 'Friendship rank up! (' + '#'.repeat ? 'Rank ' + friendUp : '' : '"' + (partner.winLine || 'Nice one.') + '"']);
       rows.push(['CLIENT', '"' + mission.def.doneLine + '"']);
     } else if (win) {
-      rows.push(['RESULT', info.ko ? 'Puppet banished' : 'Time — judges']);
+      rows.push(['RESULT', info.ko ? 'Rival mech scrapped' : 'Time — judges']);
       rows.push(['PURSE', '+' + U.fmt(credits)]);
       rows.push(['RANK', '+' + (result.rpGained || rewardRp) + ' pts']);
       if (info.noDamage) rows.push(['FLAWLESS', 'Not a scratch!']);
       rows.push(['THEM', '"' + en.defeatLine + '"']);
     } else {
-      rows.push(['RESULT', 'Your puppet broke']);
+      rows.push(['RESULT', 'Your frame is scrap']);
       rows.push(['SALVAGE', '+6 scrap']);
       rows.push(['THEM', '"' + en.taunt + '"']);
     }
@@ -499,6 +565,12 @@ Z.combat = (function () {
     }
     Z.fx.render(ctx);
     ctx.restore();
+    // combo readout (screen space) — grows + pulses with the M1 string
+    if (comboN >= 2 && phase === 'fight') {
+      const pulse = 1 + Math.sin(t * 18) * 0.06 + Math.min(comboN, 20) * 0.012;
+      Z.render.pxText(ctx, comboN + ' HITS', W * 0.5, H * 0.14, 20 * pulse, GOLD, 'center');
+      Z.render.pxText(ctx, 'COMBO', W * 0.5, H * 0.14 - 20 * pulse, 9, SPIRIT, 'center');
+    }
     Z.render.drawPetals(t);
   }
 
