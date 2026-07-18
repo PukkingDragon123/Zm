@@ -36,10 +36,11 @@ Z.game = (function () {
     if (cur === 'battle' && Z.combat.active && !(Z.cutscene && Z.cutscene.active)) Z.combat.update(dt);
     if (cur === 'world') Z.overworld.frame(dt, clock);
     else if (cur === 'ramen') Z.ramen.frame(dt, clock);
+    else if (cur === 'shop') Z.shop.frame(dt, clock);
     else if (cur === 'infil') Z.infil.frame(dt, clock);
     else if (cur === 'battle' && Z.combat.active) Z.combat.render();
     else { Z.render.clear(); Z.render.ambient(clock); }
-    if (cur === 'workbench') Z.workbench.draw(clock);
+    if (cur === 'workbench') Z.workbench.frame(dt, clock);
     Z.fx.renderScreen(Z.render.ctx, Z.render.W, Z.render.H);
   }
 

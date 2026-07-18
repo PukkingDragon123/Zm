@@ -7,7 +7,7 @@ Z.ui = (function () {
   let current = 'boot';
   let returnScreen = 'world';
   const enterHooks = {}, ACTIONS = {};
-  const SCREENS = ['boot', 'title', 'world', 'workbench', 'shop', 'ramen', 'quests', 'scavenge', 'ladder', 'battle', 'result', 'settings', 'how', 'infil'];
+  const SCREENS = ['boot', 'title', 'world', 'workbench', 'shop', 'ramen', 'quests', 'crew', 'scavenge', 'ladder', 'battle', 'result', 'settings', 'how', 'infil'];
   const screenEl = (n) => document.querySelector(`.screen[data-screen="${n}"]`);
 
   function show(name) {
@@ -18,14 +18,15 @@ Z.ui = (function () {
     screenEl(name).classList.add('active');
     transition(name);
     // controller mode
-    if (Z.controls) Z.controls.setMode(name === 'world' ? 'world' : name === 'battle' ? 'battle' : 'none');
+    if (Z.controls) Z.controls.setMode(name === 'world' || name === 'shop' ? 'world' : name === 'battle' ? 'battle' : 'none');
     if (Z.audio) Z.audio.setMode(name === 'battle' ? 'combat' : 'menu');
     (enterHooks[name] || []).forEach((fn) => { try { fn(); } catch (e) { console.error(e); } });
     updateWallet();
   }
   const TITLES = {
-    world: ['SPIRIT TOWN', 'main street'], workbench: ['YOUR DEN', 'the puppet bench'], shop: ['KITSUNE CURIOS', 'parts and charms'],
+    world: ['SPIRIT TOWN', 'main street'], workbench: ['YOUR DEN', 'the puppet bench'],
     ramen: ["AO'S RAMEN", 'eat first, fight after'], scavenge: ['JUNK GROVE', 'push your luck'],
+    shop: ['KITSUNE CURIOS', 'browse the shelves'],
     quests: ['REQUEST BOARD', 'help the town'], ladder: ['THE DOHYO', 'challenge matches'],
     crew: ['THE TEAHOUSE', 'your crew'],
     infil: ['KANE-CO CAMPS', 'sneak in, take back parts'],
@@ -64,7 +65,7 @@ Z.ui = (function () {
 
   function itemTip(item) {
     const rc = Z.data.rarityColor(item.rarity);
-    let s = `<div style="color:${rc};font-family:'Press Start 2P';font-size:9px">${item.name}</div>`;
+    let s = `<div style="color:${rc};font-family:'Mochiy Pop One',sans-serif;font-size:12px">${item.name}</div>`;
     s += `<div style="color:${rc};margin:3px 0">${(Z.data.RARITY[item.rarity] || {}).label || ''} · ${(item.category || 'frame').toUpperCase()}</div>`;
     s += `<div style="color:var(--dim);margin-bottom:5px">${item.desc || ''}</div>`;
     const st = item.stats || {}; const rows = [];

@@ -14,33 +14,39 @@ Self-contained web game — **vanilla JS + HTML5 Canvas, no build step.** Open
 
 ## Play
 
-- **Main street** — walk with **A / D**, enter doorways with **W / ENTER**. Talk
-  to townsfolk yokai; petals fall; restored districts light up with lanterns.
-- **Your den** — physics-drag workbench: hang wood, charms and rune stones on
-  your puppet. Rune stones set the spirit budget — overdraw and it sputters.
+- **Main street** — walk with **A / D**, enter doorways with **W / ENTER**. The
+  buildings live in the painted backdrop; hanging signs mark each door. Named
+  townsfolk yokai wander the street — stop and talk, and pick your answers.
+- **Your den** — diegetic build bench: open the gear box, pick a category
+  plank, drag a part tile onto its rune socket, then tighten both screws
+  (circle them with your finger, or tap fast). Tap a bolted part twice to
+  unbolt it. Rune stones set the spirit budget — overdraw and it sputters.
 - **The dohyo** — side-view puppet duels beneath the burning shrine:
   **HIT** (J) · **JUMP** (W) · **SKILL** spirit burst (K) · **BLOCK** ward (L/Shift).
   Full touch pad on mobile. Yokai puppeteers stand ringside holding glowing
   spirit strings; KANE-CO sends a hovering middle-manager drone.
+- **Kitsune curios** — a real walk-in shop: goods sit on the shelves with
+  hanging price tags. Stand at a ware to read its card, press ENTER to buy;
+  talk to the tengu at the counter to sell your spares.
 - **Request board** — Persona-style jobs from villagers: bring a crew partner,
-  clear enemy **waves**, restore the district, get paid.
-- **The teahouse** — friendship dialogues with your crew (Tengu, Kappa, Oni).
-  Higher friendship = stronger battle support (sharper attacks, mid-mission
-  repairs, iron armor).
-- **Ao's ramen** — the blue broom yokai serves snacks that buff your next fight.
-- **Junk grove** — push-your-luck digging: now the main way to find parts.
+  clear enemy **waves**, restore the district, get paid. The teahouse (crew
+  friendship dialogues) is reached from the board.
+- **Ao's ramen** — walk in, hop on a stool, and the blue broom yokai serves
+  snacks that buff your next fight.
+- **Junk grove** — push-your-luck digging: the main way to find parts.
 - **KANE-CO camps** — sneak-in parkour platformer levels (coyote time, jump
-  buffering, guards with vision cones). Cycle the tanuki's HENGE forms:
-  ROCK smashes crates and hides from guards, PAPER glides and rides vents,
-  SCISSORS dash-cuts fences. Clear camps for parts and scrap.
+  buffering, guards with lantern vision cones) deep in a misty forest —
+  ink-silhouette platforms, drifting spores, god rays. Cycle the tanuki's
+  HENGE forms: ROCK smashes crates and hides from guards, PAPER glides and
+  rides vents, SCISSORS dash-cuts fences. Clear camps for parts and scrap.
 
-## Optional animation sheets
+## Animation sheets
 
-Drop 4x2 sprite sheets at `assets/char/tanuki_sheet.png` (top row: 4 walk
+The 4x2 sprite sheets at `assets/char/tanuki_sheet.png` (top row: 4 walk
 frames · bottom row: jump, idle, happy, idle-blink) and
 `assets/char/kappa_sheet.png` (top row: idle poses · bottom row: action poses)
-and the game uses the frames automatically — walk cycles on the street, poses
-in scenes. Without them it falls back to the single cut-out images.
+drive real frame animation — walk cycles on the street and in the shop, poses
+in scenes. If removed, the game falls back to the single cut-out images.
 
 ## Credits & art
 

@@ -56,7 +56,7 @@ Z.render = (function () {
 
   // ---------- ambient (menus / interiors behind panels) ----------
   function ambient(t) {
-    if (Z.assets.cover(ctx, 'world.street', 0, 0, W, H, 0.5)) {
+    if (Z.assets.cover(ctx, Z.assets.ready('world.konbini') ? 'world.konbini' : 'world.street', 0, 0, W, H, 0.5)) {
       ctx.fillStyle = 'rgba(38,24,12,.45)'; ctx.fillRect(0, 0, W, H);
     } else {
       const g = ctx.createLinearGradient(0, 0, 0, H);
@@ -71,39 +71,6 @@ Z.render = (function () {
       });
     }
     drawPetals(t);
-  }
-
-  // ---------- cardboard-theater framing: drifting cutout clouds + foreground grass ----------
-  let clouds = null;
-  function drawTheater(t, camX) {
-    if (!clouds) { clouds = []; for (let i = 0; i < 5; i++) clouds.push({ x: U.rand(0, 1), y: U.rand(0.04, 0.2), s: U.rand(0.6, 1.3), sp: U.rand(4, 11) }); }
-    const camo = (camX || 0) * 0.06;
-    for (const cl of clouds) {
-      cl._px = ((cl.x * (W + 400) + t * cl.sp - camo) % (W + 400)) - 200;
-      const cy = cl.y * H, s = cl.s * 46;
-      paperFill(ctx, () => {
-        ctx.beginPath();
-        ctx.arc(cl._px, cy, s * 0.62, 0, U.TAU);
-        ctx.arc(cl._px + s * 0.7, cy + s * 0.12, s * 0.48, 0, U.TAU);
-        ctx.arc(cl._px - s * 0.7, cy + s * 0.16, s * 0.42, 0, U.TAU);
-        ctx.arc(cl._px + s * 0.2, cy - s * 0.3, s * 0.4, 0, U.TAU);
-      }, '#faf3e3', { cut: 4, ink: 2 });
-    }
-  }
-  function drawForeground(t, camX) {
-    // scalloped cut-paper bushes hugging the bottom edge (stage apron)
-    const gy = H + 8, step = 90, off = -((camX || 0) * 1.15 % step);
-    ctx.save();
-    ctx.fillStyle = '#3d4d33';
-    ctx.beginPath(); ctx.moveTo(-40, gy);
-    for (let x = off - step; x < W + step; x += step) {
-      const wob = Math.sin(t * 0.9 + x * 0.05) * 3;
-      ctx.quadraticCurveTo(x + step / 2, gy - 46 - wob, x + step, gy - 12);
-    }
-    ctx.lineTo(W + 40, gy); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = '#f5ecd7'; ctx.lineWidth = 4; ctx.stroke();
-    ctx.strokeStyle = '#2f2418'; ctx.lineWidth = 2; ctx.stroke();
-    ctx.restore();
   }
 
   // ---------- chunky outlined text ----------
@@ -557,7 +524,6 @@ Z.render = (function () {
   return {
     init, resize, setFrameDt, setRain, clear, ambient, drawPetals, setScene,
     pxText, roundRect, paperFill, drawSprite, drawBotSide, drawBotPreview, drawPartIcon, drawFoodIcon, getVisual,
-    drawTheater, drawForeground,
     get ctx() { return ctx; }, get W() { return W; }, get H() { return H; },
   };
 })();

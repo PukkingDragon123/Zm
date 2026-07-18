@@ -202,21 +202,56 @@ Z.data = (function () {
 
   // ---------------- overworld (spirit town main street) ----------------
   const STREET_LEN = 4600;
+  // The street art IS the buildings — each entry is just a doorway you can enter.
   const BUILDINGS = [
-    { id: 'camp',    x: 180,  w: 220, label: 'CAMPS',    screen: 'infil',     sign: 'KANE-CO CAMPS' },
-    { id: 'house',   x: 520,  w: 300, label: 'DEN',      screen: 'workbench', sign: 'YOUR DEN' },
-    { id: 'toyshop', x: 1180, w: 320, label: 'CURIO',    screen: 'shop',      sign: 'KITSUNE CURIOS' },
-    { id: 'ramen',   x: 1860, w: 300, label: 'RAMEN',    screen: 'ramen',     sign: "AO'S RAMEN" },
-    { id: 'tea',     x: 2420, w: 280, label: 'TEAHOUSE', screen: 'crew',      sign: 'THE TEAHOUSE' },
-    { id: 'board',   x: 2980, w: 200, label: 'REQUESTS', screen: 'quests',    sign: 'REQUEST BOARD' },
-    { id: 'scrap',   x: 3480, w: 320, label: 'GROVE',    screen: 'scavenge',  sign: 'JUNK GROVE' },
-    { id: 'arena',   x: 4160, w: 360, label: 'DOHYO',    screen: 'ladder',    sign: 'THE DOHYO' },
+    { id: 'camp',    x: 220,  w: 220, label: 'CAMPS',    screen: 'infil',     sign: 'KANE-CO CAMPS' },
+    { id: 'house',   x: 700,  w: 300, label: 'DEN',      screen: 'workbench', sign: 'YOUR DEN' },
+    { id: 'toyshop', x: 1340, w: 320, label: 'CURIO',    screen: 'shop',      sign: 'KITSUNE CURIOS' },
+    { id: 'ramen',   x: 1980, w: 300, label: 'RAMEN',    screen: 'ramen',     sign: "AO'S RAMEN" },
+    { id: 'board',   x: 2620, w: 200, label: 'REQUESTS', screen: 'quests',    sign: 'REQUEST BOARD' },
+    { id: 'scrap',   x: 3300, w: 320, label: 'GROVE',    screen: 'scavenge',  sign: 'JUNK GROVE' },
+    { id: 'arena',   x: 4080, w: 360, label: 'DOHYO',    screen: 'ladder',    sign: 'THE DOHYO' },
   ];
-  // street NPC positions; lines merged from generated copy below
+  // Townsfolk yokai: they wander a small patch of street, and you can stop
+  // and actually talk with them — each answer gets a different reply.
   const NPCS = [
-    { id: 'n1', x: 300 }, { id: 'n2', x: 880 }, { id: 'n3', x: 1420 }, { id: 'n4', x: 1660 },
-    { id: 'n5', x: 2160 }, { id: 'n6', x: 2700 }, { id: 'n7', x: 3200 }, { id: 'n8', x: 3720 },
-    { id: 'n9', x: 3980 }, { id: 'n10', x: 4420 },
+    { id: 'n1', x: 420, name: 'Botan', img: 'char.oni', talk: { text: 'New paws on the street. You came out of the gate walking, so you are either brave or lost.', choices: [
+      { label: 'Brave, mostly.', lines: [{ text: 'Good answer. The dohyo eats the other kind. Botan. I lift things nobody else can, and I have seen every champion since the lanterns were new.' }] },
+      { label: 'Definitely lost.', lines: [{ text: 'Then you found the right town to be lost in. Warm bowls at the ramen shop, warm fights at the dohyo. Pick one and you will feel at home.' }] },
+      { label: 'What is this place?', lines: [{ text: 'Spirit Town. Last street the megacorp has not flattened into a warehouse. We mean to keep it that way, tanuki.' }] },
+    ] } },
+    { id: 'n2', x: 980, name: 'Kiku', img: 'char.kappa', talk: { text: 'Careful past the gate. KANE-CO put up another camp in the grove and their guards do not blink. Ever.', choices: [
+      { label: 'I could sneak in.', lines: [{ text: 'Sneak in, says the round one. Well. If you do, cycle those henge forms of yours. A rock is invisible to a machine that only files reports on trespassers.' }] },
+      { label: 'What do they want?', lines: [{ text: 'Parts. Land. Quiet. Everything a town is made of, weighed and shipped south. That is why every part you steal back matters.' }] },
+    ] } },
+    { id: 'n3', x: 1520, name: 'Sudachi', img: 'char.tengu', talk: { text: 'I saw your puppet sputter on the walk over. Rune stones set the spirit budget, you know. Overdraw and the poor thing wheezes.', choices: [
+      { label: 'Any building advice?', lines: [{ text: 'Weight wins shoves, speed wins first blood. Pick the fight you want and build the whole puppet toward it. Half-measures lose both ways.' }] },
+      { label: 'It was NOT sputtering.', lines: [{ text: 'Hm. My mistake. The wind up here plays tricks. Still — a bigger rune stone never hurt anyone who was not carrying it.' }] },
+    ] } },
+    { id: 'n4', x: 1780, name: 'Mame', img: 'char.kappa', talk: { text: 'Ao gave me a free bowl once. Once. I have been sweeping his doorstep for three years hoping for a second.', choices: [
+      { label: 'The ramen is that good?', lines: [{ text: 'Good? It buffs your whole soul. Eat before a bout and you will feel the broth in your puppet strings, I swear it.' }] },
+      { label: 'Maybe just buy one.', lines: [{ text: 'Buy one. BUY one. Three years of sweeping and this tanuki says buy one. ...You are right, of course.' }] },
+    ] } },
+    { id: 'n5', x: 2280, name: 'Torimaru', img: 'char.tengu', talk: { text: 'The request board is how the town breathes now. Every job cleared is a district out of KANE-CO hands.', choices: [
+      { label: 'I will take a job.', lines: [{ text: 'Take a partner too. Tengu hits hard, kappa patches you mid-bout, oni carries iron. Friendship is not decoration here — it is armor.' }] },
+      { label: 'Does it pay?', lines: [{ text: 'It pays in coin and in lanterns. Watch the street after you restore a district. The lights that come back on are yours.' }] },
+    ] } },
+    { id: 'n6', x: 2900, name: 'Hozuki', img: 'char.oni', talk: { text: 'I dug the junk grove before it was junk. Best parts sit deep, under the hazards. That is not a metaphor.', choices: [
+      { label: 'How deep do I dig?', lines: [{ text: 'Until your paws itch. Push your luck one dig past comfortable, then cash out. The grove keeps whatever greed leaves behind.' }] },
+      { label: 'Why is it all junk?', lines: [{ text: 'KANE-CO dumps what it cannot sell. We build champions out of it. There is a lesson in that if you like lessons.' }] },
+    ] } },
+    { id: 'n7', x: 3500, name: 'Shion', img: 'char.kappa', talk: { text: 'You walk like someone who has not been thrown out of a dohyo yet. It is coming. It is wonderful.', choices: [
+      { label: 'I do not plan to lose.', lines: [{ text: 'Nobody plans to. But losing teaches your puppet where its joints are. Win after that and it means something.' }] },
+      { label: 'Any dohyo tricks?', lines: [{ text: 'Hold your ward until their swing whiffs, then answer. A perfect ward turns their momentum into your opening. The crowd loves it.' }] },
+    ] } },
+    { id: 'n8', x: 3840, name: 'Renge', img: 'char.tengu', talk: { text: 'The champion Apex-Zero has held the ring so long its shadow wore a groove in the boards.', choices: [
+      { label: 'I will dethrone it.', lines: [{ text: 'Ha. Save that sentence. I want to remind you of it at the victory feast — or carve it on something, depending.' }] },
+      { label: 'What is it like?', lines: [{ text: 'Cold. Perfect. No wasted motion, no mercy, no joy. Which is exactly why the town needs someone with your kind of grin to beat it.' }] },
+    ] } },
+    { id: 'n9', x: 4260, name: 'Goma', img: 'char.oni', talk: { text: 'Match nights, this whole end of the street smells like sparks and soy broth. Best smell in the world.', choices: [
+      { label: 'When is the next match?', lines: [{ text: 'Whenever you push that door. The dohyo does not keep a calendar, it keeps a ladder. Climb it.' }] },
+      { label: 'You fight too?', lines: [{ text: 'Retired. These days I hold the rope, ring the bell, and catch whichever puppet flies out first. Steady work.' }] },
+    ] } },
   ];
   // snack buffs for the NEXT fight (merged from generated copy below)
   const RAMEN = [

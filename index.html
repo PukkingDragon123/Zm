@@ -65,13 +65,11 @@
     <div class="bench-tools" id="benchTools"></div>
   </section>
 
-  <!-- CURIO SHOP -->
+  <!-- CURIO SHOP (canvas scene: walk in, browse the shelves) -->
   <section class="screen" data-screen="shop">
-    <div class="interior shop-bg">
-      <div class="int-head"><button class="pbtn tiny" data-act="world">LEAVE</button><h2>KITSUNE CURIO SHOP</h2><div class="int-money" id="shopMoney">0</div></div>
-      <div class="int-npc paper" id="shopNpc"></div>
-      <div class="shop-filter" id="shopFilter"></div>
-      <div class="shop-list" id="shopList"></div>
+    <div class="interior seethru">
+      <div class="int-head"><button class="pbtn tiny" data-act="world">LEAVE</button><h2>KITSUNE CURIOS</h2><div class="int-money" id="shopMoney">0</div></div>
+      <div id="shopUI"></div>
     </div>
   </section>
 
@@ -87,7 +85,7 @@
   <!-- REQUEST BOARD (missions + bounties) -->
   <section class="screen" data-screen="quests">
     <div class="interior">
-      <div class="int-head"><button class="pbtn tiny" data-act="world">LEAVE</button><h2>REQUEST BOARD</h2><div class="int-money" id="qMoney">0</div></div>
+      <div class="int-head"><button class="pbtn tiny" data-act="world">LEAVE</button><h2>REQUEST BOARD</h2><button class="pbtn tiny" data-act="crew">TEAHOUSE</button><div class="int-money" id="qMoney">0</div></div>
       <div class="board-tabs" id="boardTabs"></div>
       <div class="quests" id="missionList"></div>
       <div class="quests" id="questList" style="display:none"></div>
@@ -97,7 +95,7 @@
   <!-- TEAHOUSE / CREW -->
   <section class="screen" data-screen="crew">
     <div class="interior tea-bg">
-      <div class="int-head"><button class="pbtn tiny" data-act="world">LEAVE</button><h2>THE TEAHOUSE</h2><div class="int-money" id="crewMoney">0</div></div>
+      <div class="int-head"><button class="pbtn tiny" data-act="quests">BACK</button><h2>THE TEAHOUSE</h2><div class="int-money" id="crewMoney">0</div></div>
       <div class="crew-list" id="crewList"></div>
     </div>
     <div class="talk-layer" id="crewTalk"></div>

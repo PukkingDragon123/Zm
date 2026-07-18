@@ -12,9 +12,13 @@ Z.assets = (function () {
     'char.oni':     'assets/char/oni.png',
     'char.ao':      'assets/char/aoyokai.png',
     'world.street': 'assets/world/street.jpg',
+    'world.sakura': 'assets/world/sakura.jpg',
+    'world.konbini':'assets/world/konbini.jpg',
     'world.izakaya':'assets/world/izakaya.jpg',
     'battle.arena': 'assets/battle/arena.jpg',
     'ramen.inside': 'assets/ramen/interior.jpg',
+    'shop.inside':  'assets/shop/interior.jpg',
+    'infil.forest': 'assets/infil/forest.jpg',
   };
   const imgs = {}, status = {};
   function load() {
