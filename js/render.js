@@ -127,29 +127,57 @@ Z.render = (function () {
     return cv;
   }
 
-  // ---------- spritesheet animation (4x2 grids from uploaded art) ----------
-  // frame names -> [col,row]. Row 0 = walk cycle, row 1 = poses.
+  // ---------- spritesheet animation (grids from uploaded art) ----------
+  // frame names -> [col,row]. Frames are auto-trimmed to their content box
+  // and scaled by ONE per-sheet factor, so poses never float or resize.
   const SHEETS = {
     'char.tanuki': { key: 'sheet.tanuki', cols: 4, rows: 2, anims: { walk: [[0, 0], [1, 0], [2, 0], [3, 0]], idle: [[1, 1], [3, 1]], jump: [[0, 1]], happy: [[2, 1]], talk: [[2, 1], [1, 1]] } },
     'char.kappa': { key: 'sheet.kappa', cols: 4, rows: 2, anims: { walk: [[0, 1], [1, 1]], idle: [[0, 0], [1, 0]], jump: [[3, 1]], happy: [[3, 1]], talk: [[2, 0], [3, 0], [2, 1]] } },
+    'glide.tanuki': { key: 'sheet.glide', cols: 3, rows: 1, anims: { glide: [[0, 0], [1, 0], [2, 0]] } },
   };
+  // Per-sheet content bounding boxes (source px), computed once from the image.
+  const sheetCache = new Map();
+  function sheetInfo(def) {
+    const im = Z.assets.img(def.key); if (!im) return null;
+    let info = sheetCache.get(def.key); if (info) return info;
+    const scv = document.createElement('canvas'); scv.width = im.naturalWidth; scv.height = im.naturalHeight;
+    const sc = scv.getContext('2d', { willReadFrequently: true }); sc.drawImage(im, 0, 0);
+    const fw = im.naturalWidth / def.cols, fh = im.naturalHeight / def.rows;
+    const bb = {}; let refH = 1, refW = 1;
+    for (let row = 0; row < def.rows; row++) for (let col = 0; col < def.cols; col++) {
+      const d = sc.getImageData(col * fw | 0, row * fh | 0, fw | 0, fh | 0).data;
+      let minx = fw, miny = fh, maxx = 0, maxy = 0, any = false;
+      const W = fw | 0;
+      for (let y = 0; y < (fh | 0); y++) for (let x = 0; x < W; x++) {
+        if (d[(y * W + x) * 4 + 3] > 24) { any = true; if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y; }
+      }
+      if (!any) { bb[col + ',' + row] = { x: col * fw, y: row * fh, w: fw, h: fh }; continue; }
+      const bw = maxx - minx + 1, bh = maxy - miny + 1;
+      bb[col + ',' + row] = { x: col * fw + minx, y: row * fh + miny, w: bw, h: bh };
+      if (bh > refH) { refH = bh; refW = bw; }
+    }
+    info = { fw, fh, bb, refW, refH };
+    sheetCache.set(def.key, info);
+    return info;
+  }
   const frameCache = new Map();
-  // returns a cutout canvas for one sheet frame (cream+ink border), or null
+  // Cutout (cream+ink border) of ONE trimmed frame. `w` = on-screen width of the
+  // tallest reference pose; every frame uses the same scale so the body is stable.
   function getSheetFrame(spriteKey, anim, fi, w) {
     const def = SHEETS[spriteKey]; if (!def) return null;
     const im = Z.assets.img(def.key); if (!im) return null;
+    const info = sheetInfo(def); if (!info) return null;
     const frames = def.anims[anim] || def.anims.idle; if (!frames || !frames.length) return null;
     const [col, row] = frames[fi % frames.length];
-    const ck = spriteKey + '|' + anim + '|' + (fi % frames.length) + '|' + (w | 0);
+    const bb = info.bb[col + ',' + row]; if (!bb) return null;
+    const ck = def.key + '|' + anim + '|' + (fi % frames.length) + '|' + (w | 0);
     let cv = frameCache.get(ck); if (cv) return cv;
-    const fw = im.naturalWidth / def.cols, fh = im.naturalHeight / def.rows;
-    // slice the frame, then trim: build source canvas
-    const src = document.createElement('canvas'); src.width = fw; src.height = fh;
-    src.getContext('2d').drawImage(im, col * fw, row * fh, fw, fh, 0, 0, fw, fh);
-    const h = w * (fh / fw), border = Math.max(3, w * 0.05), pad = border + 4;
-    cv = document.createElement('canvas'); cv.width = Math.ceil(w + pad * 2); cv.height = Math.ceil(h + pad * 2);
+    const k = w / info.refW;                                   // one scale for the whole sheet
+    const dw = Math.max(2, Math.round(bb.w * k)), dh = Math.max(2, Math.round(bb.h * k));
+    const border = Math.max(2.5, dw * 0.045), pad = border + 4;
+    cv = document.createElement('canvas'); cv.width = Math.ceil(dw + pad * 2); cv.height = Math.ceil(dh + pad * 2);
     const c = cv.getContext('2d');
-    const stamp = (r, target) => { for (let i = 0; i < 16; i++) { const a = i / 16 * U.TAU; target.drawImage(src, pad + Math.cos(a) * r, pad + Math.sin(a) * r, w, h); } };
+    const stamp = (r, target) => { for (let i = 0; i < 16; i++) { const a = i / 16 * U.TAU; target.drawImage(im, bb.x, bb.y, bb.w, bb.h, pad + Math.cos(a) * r, pad + Math.sin(a) * r, dw, dh); } };
     stamp(border, c);
     c.globalCompositeOperation = 'source-in'; c.fillStyle = 'rgba(47,36,24,.9)'; c.fillRect(0, 0, cv.width, cv.height);
     c.globalCompositeOperation = 'source-over';
@@ -157,10 +185,23 @@ Z.render = (function () {
     const c2 = cv2.getContext('2d'); stamp(border - 1.8, c2);
     c2.globalCompositeOperation = 'source-in'; c2.fillStyle = '#f5ecd7'; c2.fillRect(0, 0, cv2.width, cv2.height);
     c.drawImage(cv2, 0, 0);
-    c.drawImage(src, pad, pad, w, h);
-    cv._pad = pad; cv._w = w; cv._h = h;
+    c.drawImage(im, bb.x, bb.y, bb.w, bb.h, pad, pad, dw, dh);
+    cv._pad = pad; cv._w = dw; cv._h = dh;
     frameCache.set(ck, cv);
     return cv;
+  }
+  // The tanuki hang-glider (3 poses) — held overhead, so anchor at body centre.
+  function drawGlide(x, y, opts) {
+    opts = opts || {};
+    const w = opts.w || 130, facing = opts.facing == null ? 1 : opts.facing;
+    const fi = Math.floor((opts.animT || 0) * 4);
+    const fr = getSheetFrame('glide.tanuki', 'glide', fi, w);
+    ctx.save();
+    ctx.translate(x, y); ctx.rotate(opts.tilt || 0); ctx.scale(facing, 1);
+    if (fr) ctx.drawImage(fr, -fr._w / 2 - fr._pad, -fr._h * 0.62 - fr._pad);
+    else { ctx.fillStyle = '#7a5a3a'; ctx.fillRect(-18, -30, 36, 44); }
+    ctx.restore();
+    return !!fr;
   }
 
   // ---------- bouncy image sprite (paper-mario feel) ----------
@@ -190,7 +231,8 @@ Z.render = (function () {
       const fps = opts.anim === 'walk' ? 9 : 3;
       const fi = Math.floor((opts.animT || 0) * fps);
       const fr = getSheetFrame(key, opts.anim, fi, w);
-      if (fr) { ctx.drawImage(fr, -w / 2 - fr._pad, -fr._h - fr._pad); drawn = true; }
+      // anchor the trimmed frame by its OWN width/height so feet sit on groundY
+      if (fr) { ctx.drawImage(fr, -fr._w / 2 - fr._pad, -fr._h - fr._pad); drawn = true; }
     }
     if (!drawn) {
       const cut = getCutout(key, w);
@@ -202,176 +244,242 @@ Z.render = (function () {
   }
 
   // =================================================================
-  //  HUMANOID SPIRIT PUPPET (wood + rope + rune stones), paper style
+  //  SMALL GUNPLA MECH  — panel-shaded metal, booster pack, thrusters,
+  //  fluid idle / stride / lunge / flight. (x, groundY) = feet.
+  //  anim: {t, moving, wheel, attackT, fly, spin, flip}
   // =================================================================
   function getVisual(spec) {
     const v = spec._vis; if (v) return v;
     const b = spec.build;
     let plate = 0;
     if (b) plate = (b.armor || []).filter(Boolean).length; else plate = U.clamp(Math.round((spec.armor || 0) / 14), 0, 4);
-    const nv = {
-      plate, weapons: (spec.weapons || []).map((w) => w.type),
-      accent: spec.accent || PAL.spirit, radius: spec.radius || 40,
-      corp: !spec.build,                                    // enemies = corporate robots
-      wood: spec.build ? '#a9805a' : '#8b8fa3',             // yokai puppets warm wood; corp units cold steel-grey
-      wood2: spec.build ? '#7d5b3c' : '#666b80',
-    };
+    const corp = !b;                                       // enemies = KANE-CO grunt frames
+    const accent = spec.accent || (corp ? '#ff4436' : PAL.spirit);
+    // hero mech: bright ceramic armor + accent trim · corp mech: gunmetal + red optics
+    const pal = corp
+      ? { base: '#79808c', lit: '#9aa2ad', shad: '#4a5058', dark: '#33383f', trim: accent, optic: '#ff5a44' }
+      : { base: '#eef1f6', lit: '#ffffff', shad: '#aeb8c6', dark: '#7d8798', trim: accent, optic: '#bdecff' };
+    const nv = { plate, weapons: (spec.weapons || []).map((w) => w.type), accent, radius: spec.radius || 40, corp, pal };
     spec._vis = nv; return nv;
   }
 
-  // Side-view humanoid. (x, groundY) = feet. anim: {t, walk(moving), wheel, attackT, hammer, flip, spin}
   function drawBotSide(x, groundY, facing, spec, anim, opts) {
     opts = opts || {}; anim = anim || {};
-    const v = getVisual(spec);
+    const v = getVisual(spec), P = v.pal;
     const s = (opts.scale || 1) * (v.radius / 40);
-    const accent = v.accent, wood = v.wood, wood2 = v.wood2;
-    const t = anim.t || 0;
-    const moving = !!anim.moving;
-    const walk = anim.wheel || 0;                       // walk phase
-    const hop = moving ? Math.abs(Math.sin(walk * 3)) * 7 * s : Math.sin(t * 2.4) * 2.4 * s;
-    const breathe = 1 + Math.sin(t * 2.8) * 0.02 + (moving ? Math.abs(Math.sin(walk * 3)) * 0.06 : 0);
-    const lean = (anim.attackT > 0 ? 0.16 : 0) + (moving ? 0.06 : 0);
+    const accent = v.accent, t = anim.t || 0;
+    const moving = !!anim.moving, flying = !!anim.fly, atk = anim.attackT || 0;
+    const walk = anim.wheel || 0;
+    const INK = 'rgba(18,15,12,.9)';
 
-    // proportions (chibi/anime: big head, compact body)
-    const legH = 24 * s, torsoW = 33 * s, torsoH = 30 * s, headW = 31 * s, headH = 26 * s;
-    const hipY = groundY - legH - hop;
-    const chestY = hipY - torsoH * breathe;
+    // ---- beveled metal plate helpers (light from upper-left => 3D read) ----
+    function plateRR(bx, by, bw, bh, r, base) {
+      roundRect(ctx, bx, by, bw, bh, r); ctx.fillStyle = base; ctx.fill();
+      ctx.save(); roundRect(ctx, bx, by, bw, bh, r); ctx.clip();
+      ctx.fillStyle = 'rgba(255,255,255,.22)'; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + bw, by); ctx.lineTo(bx + bw - bh * 0.5, by + bh * 0.3); ctx.lineTo(bx, by + bh * 0.42); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(20,22,28,.28)'; ctx.beginPath(); ctx.moveTo(bx + bw, by + bh); ctx.lineTo(bx, by + bh); ctx.lineTo(bx + bw * 0.42, by + bh * 0.64); ctx.lineTo(bx + bw, by + bh * 0.5); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      roundRect(ctx, bx, by, bw, bh, r); ctx.lineWidth = 1.5 * s; ctx.strokeStyle = INK; ctx.lineJoin = 'round'; ctx.stroke();
+    }
+    function poly(pts, base, opt) {
+      opt = opt || {};
+      ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath();
+      ctx.fillStyle = base; ctx.fill();
+      if (opt.lit) { ctx.save(); ctx.clip(); ctx.fillStyle = 'rgba(255,255,255,.2)'; ctx.fillRect(-100 * s, pts[0][1] - 40 * s, 200 * s, 20 * s); ctx.restore(); }
+      ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath();
+      ctx.lineWidth = (opt.lw || 1.5) * s; ctx.strokeStyle = INK; ctx.lineJoin = 'round'; ctx.stroke();
+    }
+    function glow(cx, cy, r, col, a) {
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(cx, cy, 1, cx, cy, r); g.addColorStop(0, U.rgba(col, a)); g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, r, 0, U.TAU); ctx.fill(); ctx.restore();
+    }
+
+    // proportions
+    const legH = 26 * s, torsoW = 30 * s, torsoH = 30 * s, headW = 20 * s, headH = 17 * s;
+    const hover = flying ? Math.sin(t * 3.4) * 3.5 * s : 0;
+    const hop = flying ? 0 : (moving ? Math.abs(Math.sin(walk * 3)) * 6 * s : Math.sin(t * 2.4) * 2 * s);
+    const lift = flying ? 30 * s : 0;                     // whole mech rises when flying
+    const baseY = groundY - lift + hover;
+    const lean = (atk > 0 ? 0.18 * (1 - atk) : 0) + (moving ? 0.05 : 0) + (flying ? 0.1 : 0);
+    const hipY = baseY - legH - hop;
+    const chestY = hipY - torsoH;
+    const thrust = flying ? 1 : (atk > 0 ? 0.5 : 0.12 + 0.06 * Math.sin(t * 9));   // booster intensity
+
+    // ground shadow (shrinks + fades with altitude)
+    ctx.save(); ctx.globalAlpha = 0.3 * (1 - lift / (40 * s)); ctx.fillStyle = '#12100c';
+    ctx.beginPath(); ctx.ellipse(x, groundY + 3, torsoW * (0.85 - lift / (120 * s)), 5.5 * s, 0, 0, U.TAU); ctx.fill(); ctx.restore();
 
     ctx.save();
-    // shadow
-    ctx.save(); ctx.globalAlpha = 0.35; ctx.fillStyle = '#20140a';
-    ctx.beginPath(); ctx.ellipse(x, groundY + 3, torsoW * 0.9, 6 * s, 0, 0, U.TAU); ctx.fill(); ctx.restore();
+    ctx.translate(x, 0); ctx.scale(facing, 1); ctx.rotate(lean * 0.35);
+    const step = moving ? Math.sin(walk * 3) : Math.sin(t * 2.2) * 0.1;
 
-    ctx.translate(x, 0); ctx.scale(facing, 1); ctx.rotate(lean * 0.4);
-
-    const step = moving ? Math.sin(walk * 3) : Math.sin(t * 2.4) * 0.14;
-    const P = (path, fill, o) => paperFill(ctx, path, fill, o);
-
-    // ---- back arm (swings opposite) ----
-    drawArm(-step, -1);
-    // ---- back leg ----
-    drawLeg(-step);
-    // ---- torso: wood plank chest + rope belt + rune core ----
-    P(() => roundRect(ctx, -torsoW / 2, chestY, torsoW, hipY - chestY + 4 * s, 8 * s), wood);
-    // plank seams
-    ctx.strokeStyle = 'rgba(35,22,10,.35)'; ctx.lineWidth = 1.6 * s;
-    ctx.beginPath(); ctx.moveTo(-torsoW / 2 + 4 * s, chestY + (hipY - chestY) * 0.45); ctx.lineTo(torsoW / 2 - 4 * s, chestY + (hipY - chestY) * 0.45); ctx.stroke();
-    // rope belt
-    ctx.fillStyle = '#d8c08a'; ctx.fillRect(-torsoW / 2, hipY - 6 * s, torsoW, 5 * s);
-    ctx.strokeStyle = '#8f7845'; ctx.lineWidth = 1.4; for (let i = 0; i < 5; i++) { const bx = -torsoW / 2 + i * torsoW / 4.6; ctx.beginPath(); ctx.moveTo(bx, hipY - 6 * s); ctx.lineTo(bx + 3 * s, hipY - s); ctx.stroke(); }
-    // armor planks by plate level
-    if (v.plate > 0) {
-      for (let i = 0; i < Math.min(v.plate, 3); i++) {
-        P(() => roundRect(ctx, torsoW * 0.5 - 3 * s + i * 4 * s, chestY + 3 * s, 6 * s, torsoH * 0.72, 3 * s), wood2, { cut: 3, noShadow: true });
+    // ================= BACKPACK / BOOSTER (behind everything) =================
+    (function booster() {
+      const bx = -torsoW * 0.5, by = chestY + 3 * s;
+      plateRR(bx - 7 * s, by, 12 * s, torsoH * 0.72, 3 * s, P.shad);
+      // two thruster nozzles
+      for (let i = 0; i < 2; i++) {
+        const ny = by + torsoH * (0.2 + i * 0.42);
+        poly([[bx - 3 * s, ny], [bx - 3 * s, ny + 7 * s], [bx - 9 * s, ny + 10 * s], [bx - 9 * s, ny - 3 * s]], P.dark);
+        // flame
+        const fl = thrust * (0.7 + 0.3 * Math.sin(t * 30 + i));
+        if (fl > 0.05) {
+          glow(bx - 9 * s, ny + 3.5 * s, 13 * s * fl, accent, 0.6 * fl);
+          ctx.fillStyle = U.rgba(accent, 0.9);
+          ctx.beginPath(); ctx.moveTo(bx - 8 * s, ny - 1 * s); ctx.lineTo(bx - 9 * s - 22 * s * fl, ny + 3.5 * s); ctx.lineTo(bx - 8 * s, ny + 8 * s); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = 'rgba(255,255,255,.9)';
+          ctx.beginPath(); ctx.moveTo(bx - 8 * s, ny + 1 * s); ctx.lineTo(bx - 9 * s - 11 * s * fl, ny + 3.5 * s); ctx.lineTo(bx - 8 * s, ny + 6 * s); ctx.closePath(); ctx.fill();
+        }
       }
-    }
-    // glowing rune core
-    const pulse = 0.7 + 0.3 * Math.sin(t * 5);
-    ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    const cg = ctx.createRadialGradient(0, chestY + torsoH * 0.42, 1, 0, chestY + torsoH * 0.42, 13 * s);
-    cg.addColorStop(0, U.rgba(accent, 0.85 * pulse)); cg.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(0, chestY + torsoH * 0.42, 13 * s, 0, U.TAU); ctx.fill(); ctx.restore();
-    P(() => { ctx.beginPath(); ctx.arc(0, chestY + torsoH * 0.42, 6.4 * s, 0, U.TAU); }, accent, { cut: 3, noShadow: true });
-    // rune tick on core
-    ctx.strokeStyle = '#fff8ea'; ctx.lineWidth = 1.8 * s; ctx.beginPath(); ctx.moveTo(-2.6 * s, chestY + torsoH * 0.42); ctx.lineTo(2.6 * s, chestY + torsoH * 0.42); ctx.moveTo(0, chestY + torsoH * 0.42 - 2.6 * s); ctx.lineTo(0, chestY + torsoH * 0.42 + 2.6 * s); ctx.stroke();
+    })();
 
-    // ---- front leg ----
-    drawLeg(step);
-    // ---- head: wooden mask block w/ rune eye + shide tassel ----
-    const headBob = Math.sin(t * 2.8 + 0.6) * 1.6 * s + (moving ? Math.abs(Math.sin(walk * 3 + 0.5)) * 2.2 * s : 0);
-    const hy = chestY - headH - 3 * s - headBob;
-    P(() => roundRect(ctx, -headW * 0.42, hy, headW, headH, 6 * s), v.corp ? wood : '#c39a6b');
-    // face: corp = cold visor · yokai puppet = big anime eye + blush + smile
-    if (v.corp) {
-      P(() => roundRect(ctx, headW * 0.02, hy + headH * 0.3, headW * 0.36, 5.8 * s, 2.8 * s), accent, { cut: 2.5, noShadow: true });
-      ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.7; ctx.fillRect(headW * 0.06, hy + headH * 0.33, headW * 0.08, 2 * s); ctx.globalAlpha = 1;
-    } else {
-      const ex = headW * 0.18, ey = hy + headH * 0.42;
-      ctx.fillStyle = '#fff8ea'; ctx.beginPath(); ctx.ellipse(ex, ey, 4.6 * s, 5.4 * s, 0, 0, U.TAU); ctx.fill();
-      ctx.strokeStyle = '#2f2418'; ctx.lineWidth = 1.4 * s; ctx.stroke();
-      ctx.fillStyle = '#2f2418'; ctx.beginPath(); ctx.ellipse(ex + 1.2 * s, ey + 0.4 * s, 2.6 * s, 3.2 * s, 0, 0, U.TAU); ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ex + 2.2 * s, ey - 1.2 * s, 1.1 * s, 0, U.TAU); ctx.fill();   // eye shine
-      ctx.fillStyle = 'rgba(230,110,90,.5)'; ctx.beginPath(); ctx.ellipse(ex - 5.5 * s, ey + 4.6 * s, 2.6 * s, 1.5 * s, 0, 0, U.TAU); ctx.fill(); // blush
-      ctx.strokeStyle = '#2f2418'; ctx.lineWidth = 1.7 * s; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.arc(headW * 0.1, hy + headH * 0.68, 3.2 * s, 0.2, Math.PI - 0.5); ctx.stroke(); // smile
+    // back limbs
+    drawArm(-step, -1, false, true);
+    drawLeg(-step, true);
+
+    // ================= TORSO =================
+    // waist / hip block
+    plateRR(-torsoW * 0.4, hipY - 8 * s, torsoW * 0.8, 12 * s, 3 * s, P.shad);
+    // chest
+    plateRR(-torsoW / 2, chestY, torsoW, torsoH * 0.72, 6 * s, P.base);
+    // collar / neck vents
+    poly([[-torsoW * 0.34, chestY + 2 * s], [torsoW * 0.34, chestY + 2 * s], [torsoW * 0.26, chestY + 8 * s], [-torsoW * 0.26, chestY + 8 * s]], P.dark);
+    // side intake vents
+    ctx.strokeStyle = 'rgba(20,20,26,.5)'; ctx.lineWidth = 1.3 * s;
+    for (let i = 0; i < 3; i++) { const vy = chestY + torsoH * (0.26 + i * 0.12); ctx.beginPath(); ctx.moveTo(torsoW * 0.3, vy); ctx.lineTo(torsoW * 0.44, vy); ctx.stroke(); }
+    // cockpit core (glowing)
+    const cy = chestY + torsoH * 0.34, pulse = 0.7 + 0.3 * Math.sin(t * 5);
+    glow(0, cy, 12 * s, accent, 0.7 * pulse);
+    poly([[-5 * s, cy - 6 * s], [5 * s, cy - 6 * s], [6.5 * s, cy], [5 * s, cy + 6 * s], [-5 * s, cy + 6 * s], [-6.5 * s, cy]], accent);
+    ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(-1.5 * s, cy - 1.5 * s, 2 * s, 0, U.TAU); ctx.fill();
+    // extra armor plates by plate level (layered on the chest)
+    for (let i = 0; i < Math.min(v.plate, 3); i++) {
+      plateRR(torsoW * 0.16 + i * 4 * s, chestY + 4 * s, 5 * s, torsoH * 0.5, 2 * s, P.trim === accent ? P.dark : P.trim);
     }
-    // paper shide zigzag tassel on head
-    ctx.save(); ctx.translate(-headW * 0.3, hy - 1 * s); ctx.rotate(Math.sin(t * 3) * 0.18 - 0.2);
-    ctx.fillStyle = '#fff8ea'; ctx.strokeStyle = '#2f2418'; ctx.lineWidth = 1.4;
-    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(4 * s, -7 * s); ctx.lineTo(-1 * s, -8 * s); ctx.lineTo(3 * s, -14 * s); ctx.lineTo(-4 * s, -12 * s); ctx.lineTo(-2 * s, -5 * s); ctx.closePath(); ctx.fill(); ctx.stroke();
+
+    // front leg over torso base
+    drawLeg(step, false);
+
+    // ================= SHOULDER (front pauldron) =================
+    plateRR(torsoW * 0.28, chestY + 1 * s, 14 * s, 13 * s, 4 * s, P.base);
+    poly([[torsoW * 0.3, chestY + 2 * s], [torsoW * 0.3 + 12 * s, chestY + 2 * s], [torsoW * 0.3 + 9 * s, chestY + 6 * s], [torsoW * 0.3, chestY + 6 * s]], P.trim === accent ? accent : P.trim, { lw: 1.2 });
+
+    // ================= HEAD =================
+    const headBob = Math.sin(t * 2.8 + 0.6) * 1.2 * s + (moving ? Math.abs(Math.sin(walk * 3 + 0.5)) * 1.6 * s : 0);
+    const hy = chestY - headH - 1 * s - headBob;
+    plateRR(-headW / 2, hy, headW, headH, 4 * s, P.base);
+    // cheek guards
+    poly([[-headW / 2, hy + headH * 0.4], [-headW / 2 - 3 * s, hy + headH * 0.55], [-headW / 2, hy + headH * 0.9]], P.shad);
+    poly([[headW / 2, hy + headH * 0.4], [headW / 2 + 3 * s, hy + headH * 0.55], [headW / 2, hy + headH * 0.9]], P.shad);
+    // visor (single wide optic band, glowing)
+    const vy = hy + headH * 0.5;
+    glow(0, vy, 7 * s, P.optic, 0.55);
+    poly([[-headW * 0.42, vy - 2.4 * s], [headW * 0.42, vy - 2.4 * s], [headW * 0.36, vy + 2.4 * s], [-headW * 0.36, vy + 2.4 * s]], P.optic, { lw: 1.2 });
+    ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fillRect(headW * 0.1, vy - 1.6 * s, headW * 0.16, 1.6 * s);
+    // V-fin crest
+    ctx.save(); ctx.translate(0, hy);
+    poly([[-1.5 * s, 0], [-9 * s, -8 * s], [-6 * s, -8.5 * s], [-1 * s, -2 * s]], accent, { lw: 1.2 });
+    poly([[1.5 * s, 0], [9 * s, -8 * s], [6 * s, -8.5 * s], [1 * s, -2 * s]], accent, { lw: 1.2 });
+    ctx.fillStyle = accent; ctx.fillRect(-1.6 * s, -3 * s, 3.2 * s, 3 * s);
+    // forehead sensor gem
+    ctx.fillStyle = '#ffd24a'; ctx.beginPath(); ctx.arc(0, 3 * s, 1.7 * s, 0, U.TAU); ctx.fill();
     ctx.restore();
 
-    // ---- front arm + weapon ----
-    drawArm(step, 1, true);
+    // ================= FRONT ARM + WEAPON =================
+    drawArm(step, 1, true, false);
 
-    // damage cracks + hit flash
+    // damage sparks + hit flash
     const hp = opts.hpFrac == null ? 1 : opts.hpFrac;
-    if (hp < 0.55) {
-      ctx.strokeStyle = 'rgba(35,22,10,.75)'; ctx.lineWidth = 1.8 * s;
-      ctx.beginPath(); ctx.moveTo(-torsoW * 0.3, chestY + 4 * s); ctx.lineTo(-torsoW * 0.12, chestY + 12 * s); ctx.lineTo(-torsoW * 0.28, chestY + 18 * s); ctx.stroke();
+    if (hp < 0.5) {
+      ctx.strokeStyle = 'rgba(20,16,12,.7)'; ctx.lineWidth = 1.6 * s;
+      ctx.beginPath(); ctx.moveTo(-torsoW * 0.28, chestY + 5 * s); ctx.lineTo(-torsoW * 0.1, chestY + 12 * s); ctx.lineTo(-torsoW * 0.24, chestY + 18 * s); ctx.stroke();
+      if (Math.sin(t * 22) > 0.6) glow(-torsoW * 0.16, chestY + 12 * s, 6 * s, '#ffcf6a', 0.7);
     }
     if (opts.flash) {
       ctx.save(); ctx.globalAlpha = opts.flash; ctx.globalCompositeOperation = 'lighter';
-      roundRect(ctx, -torsoW * 0.7, hy, torsoW * 1.4, groundY - hy, 10 * s); ctx.fillStyle = '#fff'; ctx.fill(); ctx.restore();
+      roundRect(ctx, -torsoW * 0.7, hy, torsoW * 1.4, groundY - hy, 8 * s); ctx.fillStyle = '#fff'; ctx.fill(); ctx.restore();
     }
     ctx.restore();
 
-    function drawLeg(ph) {
-      const swing = ph * (moving ? 10 : 2) * s;
-      const lift = Math.max(0, ph) * (moving ? 7 : 0) * s;
-      const kx = swing, ky = groundY - legH * 0.52 - hop * 0.6 - lift * 0.4;
-      const fx2 = swing * 1.7, fy = groundY - lift;
-      // thigh + shin as rounded wooden sticks
-      ctx.strokeStyle = '#f5ecd7'; ctx.lineWidth = 9.5 * s; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(0, hipY - 2 * s); ctx.lineTo(kx, ky); ctx.lineTo(fx2, fy - 4 * s); ctx.stroke();
-      ctx.strokeStyle = wood2; ctx.lineWidth = 6 * s;
-      ctx.beginPath(); ctx.moveTo(0, hipY - 2 * s); ctx.lineTo(kx, ky); ctx.lineTo(fx2, fy - 4 * s); ctx.stroke();
-      // geta foot
-      P(() => roundRect(ctx, fx2 - 7 * s, fy - 5 * s, 15 * s, 5 * s, 2 * s), '#5b4630', { cut: 3, noShadow: true });
+    // ---- limbs ----
+    function drawLeg(ph, back) {
+      const col = back ? P.shad : P.base, colD = back ? P.dark : P.shad;
+      const swing = ph * (moving ? 9 : 1.5) * s;
+      const legLift = flying ? 10 * s : Math.max(0, ph) * (moving ? 6 : 0) * s;
+      const hipX = 0, kneeX = swing, kneeY = hipY + legH * 0.5 - legLift * 0.5;
+      const footX = swing * 1.5, footY = baseY - legLift + (flying ? 6 * s : 0);
+      // thigh
+      poly([[hipX - 4.5 * s, hipY - 2 * s], [hipX + 4.5 * s, hipY - 2 * s], [kneeX + 4 * s, kneeY], [kneeX - 4 * s, kneeY]], col);
+      // knee
+      plateRR(kneeX - 4 * s, kneeY - 3 * s, 8 * s, 7 * s, 2.5 * s, colD);
+      // shin
+      poly([[kneeX - 3.6 * s, kneeY], [kneeX + 3.6 * s, kneeY], [footX + 3.4 * s, footY - 5 * s], [footX - 3.4 * s, footY - 5 * s]], col);
+      // thruster foot
+      plateRR(footX - 6 * s, footY - 5 * s, 13 * s, 6 * s, 2 * s, colD);
+      if (flying) { const fl = 0.6 + 0.3 * Math.sin(t * 26 + (back ? 1 : 0)); glow(footX, footY + 1 * s, 9 * s * fl, accent, 0.4 * fl); ctx.fillStyle = U.rgba(accent, 0.8); ctx.beginPath(); ctx.moveTo(footX - 3 * s, footY); ctx.lineTo(footX, footY + 12 * s * fl); ctx.lineTo(footX + 3 * s, footY); ctx.closePath(); ctx.fill(); }
     }
-    function drawArm(ph, side, withWeapon) {
-      const base = withWeapon ? -0.5 : 0.3;
-      let aAng = base + ph * 0.5 * side;
-      if (withWeapon && anim.attackT > 0) aAng = -1.5 + (1 - anim.attackT) * 2.4;   // wind-up -> swing
-      const sx2 = side * torsoW * 0.42, sy2 = chestY + torsoH * 0.24;
-      const ex = sx2 + Math.cos(aAng) * 15 * s * side, ey = sy2 + Math.sin(aAng) * 15 * s + 6 * s;
-      ctx.strokeStyle = '#f5ecd7'; ctx.lineWidth = 8.6 * s; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(sx2, sy2); ctx.lineTo(ex, ey); ctx.stroke();
-      ctx.strokeStyle = wood; ctx.lineWidth = 5.2 * s;
-      ctx.beginPath(); ctx.moveTo(sx2, sy2); ctx.lineTo(ex, ey); ctx.stroke();
-      // paw/hand
-      ctx.fillStyle = wood2; ctx.beginPath(); ctx.arc(ex, ey, 4 * s, 0, U.TAU); ctx.fill();
-      if (withWeapon && v.weapons.length) drawWeapon(v.weapons[0], ex, ey, aAng);
+    function drawArm(ph, side, withWeapon, back) {
+      const col = back ? P.shad : P.base, colD = back ? P.dark : P.shad;
+      const baseAng = withWeapon ? -0.35 : 0.4;
+      let aAng = baseAng + ph * 0.45 * side;
+      if (withWeapon && atk > 0) aAng = -1.7 + (1 - atk) * 2.6;      // wind-up -> swing
+      if (flying && withWeapon) aAng = -0.15;
+      const shX = side * torsoW * 0.34, shY = chestY + torsoH * 0.18;
+      const elX = shX + Math.cos(aAng) * 12 * s * side, elY = shY + Math.sin(aAng) * 12 * s + 5 * s;
+      const haX = elX + Math.cos(aAng + 0.3) * 11 * s * side, haY = elY + Math.sin(aAng + 0.3) * 11 * s + 3 * s;
+      // shoulder pauldron
+      plateRR(shX - 5 * s * side - 5 * s, shY - 6 * s, 12 * s, 12 * s, 3.5 * s, col);
+      // upper arm
+      ctx.strokeStyle = INK; ctx.lineWidth = 8.5 * s; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(shX, shY); ctx.lineTo(elX, elY); ctx.stroke();
+      ctx.strokeStyle = colD; ctx.lineWidth = 6 * s; ctx.beginPath(); ctx.moveTo(shX, shY); ctx.lineTo(elX, elY); ctx.stroke();
+      // forearm
+      ctx.strokeStyle = INK; ctx.lineWidth = 8.5 * s; ctx.beginPath(); ctx.moveTo(elX, elY); ctx.lineTo(haX, haY); ctx.stroke();
+      ctx.strokeStyle = col; ctx.lineWidth = 6 * s; ctx.beginPath(); ctx.moveTo(elX, elY); ctx.lineTo(haX, haY); ctx.stroke();
+      // fist
+      plateRR(haX - 3.5 * s, haY - 3.5 * s, 7 * s, 7 * s, 2 * s, colD);
+      if (withWeapon && v.weapons.length) drawWeapon(v.weapons[0], haX, haY, aAng);
     }
     function drawWeapon(type, hx, hy2, aAng) {
       ctx.save(); ctx.translate(hx, hy2);
-      if (type === 'spinner') {
-        ctx.rotate(anim.spin || 0);
-        // prayer-wheel saw
-        P(() => { ctx.beginPath(); ctx.arc(0, 0, 13 * s, 0, U.TAU); }, '#c9a35f', { cut: 3.4, noShadow: true });
-        ctx.strokeStyle = '#2f2418'; ctx.lineWidth = 2 * s;
-        for (let i = 0; i < 4; i++) { const a = i / 4 * U.TAU; ctx.beginPath(); ctx.moveTo(Math.cos(a) * 5 * s, Math.sin(a) * 5 * s); ctx.lineTo(Math.cos(a) * 12 * s, Math.sin(a) * 12 * s); ctx.stroke(); }
-        ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(0, 0, 3.4 * s, 0, U.TAU); ctx.fill();
-      } else if (type === 'hammer') {
-        ctx.rotate(aAng * 0.4 + 0.5);
-        ctx.strokeStyle = '#f5ecd7'; ctx.lineWidth = 8 * s; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(20 * s, -8 * s); ctx.stroke();
-        ctx.strokeStyle = '#8a6a45'; ctx.lineWidth = 4.6 * s; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(20 * s, -8 * s); ctx.stroke();
-        P(() => roundRect(ctx, 14 * s, -22 * s, 15 * s, 18 * s, 4 * s), '#b0844f', { cut: 3.4, noShadow: true });
-        ctx.strokeStyle = 'rgba(35,22,10,.4)'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(16 * s, -13 * s); ctx.lineTo(27 * s, -13 * s); ctx.stroke();
-      } else if (type === 'flipper') {
-        ctx.rotate(-(anim.flip || 0) * 1.1 + 0.2);
-        // war fan (harisen)
-        P(() => { ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(20 * s, -12 * s); ctx.lineTo(23 * s, 2 * s); ctx.closePath(); }, '#e8d3a0', { cut: 3, noShadow: true });
-        ctx.strokeStyle = 'rgba(35,22,10,.45)'; ctx.lineWidth = 1.3;
-        for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(2 * s, -s); ctx.lineTo(20 * s, -12 * s + i * 4.4 * s); ctx.stroke(); }
-      } else if (type === 'flamer') {
-        // flame gourd
-        P(() => { ctx.beginPath(); ctx.arc(8 * s, 2 * s, 6.4 * s, 0, U.TAU); ctx.arc(14 * s, -3 * s, 4.4 * s, 0, U.TAU); }, '#c96f3a', { cut: 3, noShadow: true });
-        ctx.fillStyle = PAL.red; ctx.beginPath(); ctx.arc(17 * s, -5 * s, 2.4 * s, 0, U.TAU); ctx.fill();
-      } else { // blade — wooden katana
+      if (type === 'spinner') {                            // gatling / vulcan
+        ctx.rotate(-0.1);
+        plateRR(0, -6 * s, 26 * s, 12 * s, 3 * s, P.dark);
+        ctx.save(); ctx.translate(6 * s, 0); ctx.rotate(anim.spin || 0);
+        for (let i = 0; i < 5; i++) { const a = i / 5 * U.TAU; ctx.fillStyle = i % 2 ? '#8a929c' : '#5a616b'; ctx.beginPath(); ctx.arc(Math.cos(a) * 4 * s, Math.sin(a) * 4 * s, 2.2 * s, 0, U.TAU); ctx.fill(); }
+        ctx.restore();
+        ctx.fillStyle = P.shad; ctx.fillRect(20 * s, -3 * s, 10 * s, 6 * s);
+        if (atk > 0) { glow(30 * s, 0, 8 * s, '#ffd66a', 0.8); }
+      } else if (type === 'hammer') {                      // heat maul
+        ctx.rotate(aAng * 0.35 + 0.5);
+        ctx.strokeStyle = INK; ctx.lineWidth = 6 * s; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(20 * s, -8 * s); ctx.stroke();
+        ctx.strokeStyle = P.shad; ctx.lineWidth = 4 * s; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(20 * s, -8 * s); ctx.stroke();
+        plateRR(15 * s, -22 * s, 15 * s, 18 * s, 3 * s, P.base);
+        ctx.fillStyle = U.rgba(accent, 0.5 + 0.5 * Math.abs(Math.sin(t * 4))); ctx.fillRect(17 * s, -20 * s, 3 * s, 14 * s);
+      } else if (type === 'flipper') {                     // energy shield
+        ctx.rotate(-(anim.flip || 0) * 0.8 + 0.1);
+        plateRR(2 * s, -14 * s, 9 * s, 28 * s, 4 * s, P.base);
+        ctx.strokeStyle = accent; ctx.lineWidth = 2 * s; ctx.strokeRect(4 * s, -10 * s, 5 * s, 20 * s);
+        glow(6 * s, 0, 10 * s, accent, 0.3);
+      } else if (type === 'flamer') {                      // beam cannon
+        plateRR(0, -5 * s, 22 * s, 11 * s, 3 * s, P.dark);
+        plateRR(4 * s, -4 * s, 8 * s, 9 * s, 2 * s, P.shad);
+        const em = 0.5 + 0.5 * Math.abs(Math.sin(t * 6));
+        glow(24 * s, 0, 9 * s, accent, 0.5 + em * 0.4);
+        ctx.fillStyle = U.rgba(accent, 0.9); ctx.beginPath(); ctx.arc(22 * s, 0, 3.4 * s, 0, U.TAU); ctx.fill();
+        if (atk > 0) { ctx.fillStyle = U.rgba(accent, 0.8); ctx.fillRect(24 * s, -2.4 * s, 40 * s, 4.8 * s); ctx.fillStyle = '#fff'; ctx.fillRect(24 * s, -1 * s, 40 * s, 2 * s); }
+      } else {                                             // beam saber (blade)
         ctx.rotate(aAng * 0.3);
-        P(() => { ctx.beginPath(); ctx.moveTo(2 * s, 0); ctx.lineTo(26 * s, -7 * s); ctx.lineTo(25 * s, -2.4 * s); ctx.lineTo(3 * s, 4 * s); ctx.closePath(); }, '#ddc188', { cut: 3, noShadow: true });
-        ctx.fillStyle = '#8a4a3a'; ctx.fillRect(-1 * s, -2 * s, 5 * s, 6 * s);
+        // hilt
+        plateRR(0, -2.6 * s, 8 * s, 5 * s, 1.6 * s, P.dark);
+        // energy blade
+        const blen = 30 * s;
+        glow(8 * s + blen * 0.5, 0, 10 * s, accent, 0.6);
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = U.rgba(accent, 0.85); ctx.beginPath(); ctx.moveTo(8 * s, -3.2 * s); ctx.lineTo(8 * s + blen, -1 * s); ctx.lineTo(8 * s + blen + 4 * s, 0); ctx.lineTo(8 * s + blen, 1 * s); ctx.lineTo(8 * s, 3.2 * s); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.beginPath(); ctx.moveTo(8 * s, -1.4 * s); ctx.lineTo(8 * s + blen, 0); ctx.lineTo(8 * s, 1.4 * s); ctx.closePath(); ctx.fill();
+        ctx.restore();
       }
       ctx.restore();
     }
@@ -523,7 +631,7 @@ Z.render = (function () {
 
   return {
     init, resize, setFrameDt, setRain, clear, ambient, drawPetals, setScene,
-    pxText, roundRect, paperFill, drawSprite, drawBotSide, drawBotPreview, drawPartIcon, drawFoodIcon, getVisual,
+    pxText, roundRect, paperFill, drawSprite, drawGlide, drawBotSide, drawBotPreview, drawPartIcon, drawFoodIcon, getVisual,
     get ctx() { return ctx; }, get W() { return W; }, get H() { return H; },
   };
 })();

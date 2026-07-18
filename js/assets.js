@@ -6,6 +6,7 @@ Z.assets = (function () {
     // optional animation sheets (4 cols x 2 rows) — drop them in and they're used automatically
     'sheet.tanuki': 'assets/char/tanuki_sheet.png',
     'sheet.kappa':  'assets/char/kappa_sheet.png',
+    'sheet.glide':  'assets/char/tanuki_glide.png',   // 3 hang-glider poses
     'char.tanuki':  'assets/char/tanuki.png',
     'char.tengu':   'assets/char/tengu.png',
     'char.kappa':   'assets/char/kappa.png',
@@ -15,11 +16,20 @@ Z.assets = (function () {
     'world.sakura': 'assets/world/sakura.jpg',
     'world.konbini':'assets/world/konbini.jpg',
     'world.izakaya':'assets/world/izakaya.jpg',
+    'world.townview':   'assets/world/townview.jpg',      // crossroad / town map view
+    'world.house':      'assets/world/house_interior.jpg',// walkable home
+    'world.workbench':  'assets/world/workbench.jpg',     // crafting bench close-up
     'battle.arena': 'assets/battle/arena.jpg',
     'ramen.inside': 'assets/ramen/interior.jpg',
+    'ramen.exterior':   'assets/ramen/exterior.jpg',
+    'ramen.eating':     'assets/ramen/eating.jpg',        // persona dialogue scene
     'shop.inside':  'assets/shop/interior.jpg',
+    'cave.forge':       'assets/cave/forge.jpg',          // workshop outside town
+    'cave.shop':        'assets/cave/shop.jpg',           // oni model-kit shop
     'infil.forest': 'assets/infil/forest.jpg',
   };
+  // industrial obby tiles t00..t44 (sliced from the uploaded sheet)
+  for (let i = 0; i < 45; i++) { const n = 't' + String(i).padStart(2, '0'); MANIFEST['tile.' + n] = 'assets/tiles/' + n + '.png'; }
   const imgs = {}, status = {};
   function load() {
     Object.keys(MANIFEST).forEach((k) => {
