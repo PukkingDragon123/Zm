@@ -136,28 +136,40 @@ Z.render = (function () {
     'glide.tanuki': { key: 'sheet.glide', cols: 3, rows: 1, anims: { glide: [[0, 0], [1, 0], [2, 0]] } },
   };
   // Per-sheet content bounding boxes (source px), computed once from the image.
+  // Robust: if the pixels can't be read (e.g. a cross-origin-tainted canvas on
+  // some hosts) or the frame looks empty, we return null and the caller draws
+  // the plain cutout instead — so the character NEVER silently vanishes.
   const sheetCache = new Map();
   function sheetInfo(def) {
     const im = Z.assets.img(def.key); if (!im) return null;
-    let info = sheetCache.get(def.key); if (info) return info;
-    const scv = document.createElement('canvas'); scv.width = im.naturalWidth; scv.height = im.naturalHeight;
-    const sc = scv.getContext('2d', { willReadFrequently: true }); sc.drawImage(im, 0, 0);
-    const fw = im.naturalWidth / def.cols, fh = im.naturalHeight / def.rows;
-    const bb = {}; let refH = 1, refW = 1;
-    for (let row = 0; row < def.rows; row++) for (let col = 0; col < def.cols; col++) {
-      const d = sc.getImageData(col * fw | 0, row * fh | 0, fw | 0, fh | 0).data;
-      let minx = fw, miny = fh, maxx = 0, maxy = 0, any = false;
-      const W = fw | 0;
-      for (let y = 0; y < (fh | 0); y++) for (let x = 0; x < W; x++) {
-        if (d[(y * W + x) * 4 + 3] > 24) { any = true; if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y; }
+    const cached = sheetCache.get(def.key);
+    if (cached) return cached.bad ? null : cached;
+    let info;
+    try {
+      const scv = document.createElement('canvas'); scv.width = im.naturalWidth; scv.height = im.naturalHeight;
+      const sc = scv.getContext('2d', { willReadFrequently: true }); sc.drawImage(im, 0, 0);
+      const fw = im.naturalWidth / def.cols, fh = im.naturalHeight / def.rows;
+      const bb = {}; let refH = 0, refW = 0, found = 0;
+      for (let row = 0; row < def.rows; row++) for (let col = 0; col < def.cols; col++) {
+        const d = sc.getImageData(col * fw | 0, row * fh | 0, fw | 0, fh | 0).data;   // may throw (taint)
+        let minx = fw, miny = fh, maxx = 0, maxy = 0, any = false;
+        const W = fw | 0;
+        for (let y = 0; y < (fh | 0); y++) for (let x = 0; x < W; x++) {
+          if (d[(y * W + x) * 4 + 3] > 24) { any = true; if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y; }
+        }
+        if (!any) { bb[col + ',' + row] = { x: col * fw, y: row * fh, w: fw, h: fh }; continue; }
+        found++;
+        const bw = maxx - minx + 1, bh = maxy - miny + 1;
+        bb[col + ',' + row] = { x: col * fw + minx, y: row * fh + miny, w: bw, h: bh };
+        if (bh > refH) { refH = bh; refW = bw; }
       }
-      if (!any) { bb[col + ',' + row] = { x: col * fw, y: row * fh, w: fw, h: fh }; continue; }
-      const bw = maxx - minx + 1, bh = maxy - miny + 1;
-      bb[col + ',' + row] = { x: col * fw + minx, y: row * fh + miny, w: bw, h: bh };
-      if (bh > refH) { refH = bh; refW = bw; }
+      if (!found || refW < 2 || refH < 2) throw new Error('empty sheet');   // nothing readable -> use cutout
+      info = { fw, fh, bb, refW, refH };
+      sheetCache.set(def.key, info);
+    } catch (e) {
+      sheetCache.set(def.key, { bad: true });                              // remember: never retry, always cutout
+      return null;
     }
-    info = { fw, fh, bb, refW, refH };
-    sheetCache.set(def.key, info);
     return info;
   }
   const frameCache = new Map();
@@ -230,14 +242,14 @@ Z.render = (function () {
     if (opts.anim) {
       const fps = opts.anim === 'walk' ? 9 : 3;
       const fi = Math.floor((opts.animT || 0) * fps);
-      const fr = getSheetFrame(key, opts.anim, fi, w);
+      let fr = null; try { fr = getSheetFrame(key, opts.anim, fi, w); } catch (e) { fr = null; }
       // anchor the trimmed frame by its OWN width/height so feet sit on groundY
       if (fr) { ctx.drawImage(fr, -fr._w / 2 - fr._pad, -fr._h - fr._pad); drawn = true; }
     }
     if (!drawn) {
-      const cut = getCutout(key, w);
+      let cut = null; try { cut = getCutout(key, w); } catch (e) { cut = null; }
       if (cut) ctx.drawImage(cut, -w / 2 - cut._pad, -h - cut._pad);
-      else ctx.drawImage(im, -w / 2, -h, w, h);
+      else ctx.drawImage(im, -w / 2, -h, w, h);          // last resort: raw art, always visible
     }
     ctx.restore();
     return true;
