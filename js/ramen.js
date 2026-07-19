@@ -42,15 +42,16 @@ Z.ramen = (function () {
 
     if (phase === 'feast') { drawFeast(ctx, W, H, dt, t); Z.render.drawPetals(t); return; }
 
-    // ---- walk-in: clean counter interior ----
-    if (!Z.assets.cover(ctx, 'ramen.inside', 0, 0, W, H, 0.5)) {
+    // ---- walk-in: clean night ramen-stall exterior ----
+    if (!Z.assets.cover(ctx, 'ramen.exterior', 0, 0, W, H, 0.5) &&
+        !Z.assets.cover(ctx, 'ramen.inside', 0, 0, W, H, 0.5)) {
       const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#3a2a18'); g.addColorStop(1, '#241a10');
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     }
     const groundY = H * 0.9;
-    const tanW = U.clamp(H * 0.34, 180, 300);              // big tanuki (~3x old)
-    const aoW = U.clamp(H * 0.42, 220, 360);               // big Ao behind the counter
-    const stoolH = U.clamp(H * 0.09, 46, 96);
+    const tanW = U.clamp(H * 0.16, 90, 150);               // small tanuki (~3x smaller)
+    const aoW = U.clamp(H * 0.2, 110, 180);                // small Ao behind the counter
+    const stoolH = U.clamp(H * 0.06, 34, 64);
     const seatX = W * 0.4;
 
     // soft ground-contact shade only — keep the photo bright
@@ -80,6 +81,8 @@ Z.ramen = (function () {
       // settled on the stool -> cut to the cozy feast + dialogue
       if (seatT > 0.72 && !menuLaunched) { menuLaunched = true; toFeast(); }
     }
+    timeTint(ctx, W, H);
+    if (Z.clock && Z.clock.draw) Z.clock.draw(ctx, 40, 46);
     Z.render.drawPetals(t);
   }
 
@@ -92,8 +95,9 @@ Z.ramen = (function () {
 
   // the 'ramen.eating' art as a big warm cut-in behind the dialogue box
   function drawFeast(ctx, W, H, dt, t) {
-    // base interior, then dissolve the group-eating cut-in over it
-    if (!Z.assets.cover(ctx, 'ramen.inside', 0, 0, W, H, 0.5)) { ctx.fillStyle = '#2a1e12'; ctx.fillRect(0, 0, W, H); }
+    // base exterior, then dissolve the group-eating cut-in over it
+    if (!Z.assets.cover(ctx, 'ramen.exterior', 0, 0, W, H, 0.5) &&
+        !Z.assets.cover(ctx, 'ramen.inside', 0, 0, W, H, 0.5)) { ctx.fillStyle = '#2a1e12'; ctx.fillRect(0, 0, W, H); }
     feastT = Math.min(1, feastT + dt * 2.4);
     ctx.save(); ctx.globalAlpha = feastT;
     if (!Z.assets.cover(ctx, 'ramen.eating', 0, 0, W, H, 0.5)) {
@@ -120,6 +124,29 @@ Z.ramen = (function () {
       g.addColorStop(0, U.rgba('#fff4e0', a)); g.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, U.TAU); ctx.fill();
     }
+    ctx.restore();
+    timeTint(ctx, W, H);
+  }
+
+  // gentle time-of-day wash: warm noon -> orange dusk -> cool blue night
+  function timeTint(ctx, W, H) {
+    const stops = [
+      [0, 38, 52, 104, 0.32], [5, 54, 58, 118, 0.26], [6, 240, 168, 110, 0.16],
+      [8, 255, 228, 186, 0.05], [12, 255, 244, 214, 0.0], [16, 255, 222, 172, 0.06],
+      [18, 255, 150, 84, 0.18], [19, 120, 96, 140, 0.22], [21, 48, 60, 120, 0.30],
+      [24, 38, 52, 104, 0.32],
+    ];
+    let hr = (Z.state && typeof Z.state.clock === 'number') ? Z.state.clock : 12;
+    hr = ((hr % 24) + 24) % 24;
+    let a = stops[0], b = stops[stops.length - 1];
+    for (let i = 0; i < stops.length - 1; i++) { if (hr >= stops[i][0] && hr <= stops[i + 1][0]) { a = stops[i]; b = stops[i + 1]; break; } }
+    const span = (b[0] - a[0]) || 1, f = U.clamp((hr - a[0]) / span, 0, 1);
+    const al = U.lerp(a[4], b[4], f);
+    if (al <= 0.002) return;
+    const r = U.lerp(a[1], b[1], f) | 0, g = U.lerp(a[2], b[2], f) | 0, bl = U.lerp(a[3], b[3], f) | 0;
+    ctx.save();
+    ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + bl + ',' + al.toFixed(3) + ')';
+    ctx.fillRect(0, 0, W, H);
     ctx.restore();
   }
 

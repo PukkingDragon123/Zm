@@ -262,13 +262,27 @@ Z.infil = (function () {
   let solids = [], oneways = [], hazards = [], fans = [], crates = [], fences = [], ladders = [], decor = [], pickups = [], guards = [], checkpoints = [];
   let p = null, camX = 0, camY = 0, t = 0, deaths = 0, got = [], alarmT = 0, doneT = 0;
   let coyote = 0, jbuf = 0, formPoof = 0, cp = null, reachedCp = null;
-  let motes = null;
+  let motes = null, fog = null;
+  let raidMode = false, raidIndex = 0;    // set by startRaid(); routes the exit into a boss fight
 
+  // boss picked from D.enemies, scaled to the raid index (harder deeper in)
+  const BOSS_BANDS = [[1, 2], [3, 4], [5, 7]];
+  function pickBoss(idx) {
+    const band = BOSS_BANDS[U.clamp(idx, 0, BOSS_BANDS.length - 1)];
+    let pool = (D.enemies || []).filter((e) => e.tier >= band[0] && e.tier <= band[1] && !e.isChampion);
+    if (!pool.length) pool = (D.enemies || []).filter((e) => !e.isChampion);
+    if (!pool.length) pool = D.enemies || [];
+    return U.choice(pool) || null;
+  }
+
+  // small, cute runner — jump/gravity kept as tuned so every level stays
+  // clearable; only the hitboxes (pw/ph) are trimmed so the tanuki reads
+  // small against the big industrial set, with lots of visible background.
   const PHYS = {
-    tanuki:   { run: 240, jump: 700, grav: 1900, fall: 1000, pw: 17, ph: 48 },
-    rock:     { run: 130, jump: 0,   grav: 2800, fall: 1500, pw: 22, ph: 40 },
-    paper:    { run: 195, jump: 340, grav: 560,  fall: 155,  pw: 24, ph: 40 },
-    scissors: { run: 275, jump: 640, grav: 1900, fall: 1000, pw: 16, ph: 44 },
+    tanuki:   { run: 240, jump: 700, grav: 1900, fall: 1000, pw: 13, ph: 38 },
+    rock:     { run: 130, jump: 0,   grav: 2800, fall: 1500, pw: 17, ph: 32 },
+    paper:    { run: 195, jump: 340, grav: 560,  fall: 155,  pw: 18, ph: 32 },
+    scissors: { run: 275, jump: 640, grav: 1900, fall: 1000, pw: 12, ph: 34 },
   };
 
   // ---------- level select (DOM) ----------
@@ -299,7 +313,16 @@ Z.infil = (function () {
     });
   }
 
-  function startLevel(lv) {
+  // Start raid level [index] straight into play — no DOM select. Called by
+  // the phone's raid map. Reaching the exit hands off to a boss fight.
+  function startRaid(index) {
+    const idx = U.clamp(index | 0, 0, LEVELS.length - 1);
+    if (Z.ui.current !== 'infil') Z.ui.show('infil');   // show() runs enter() (select); startLevel overrides it
+    startLevel(LEVELS[idx], true);
+  }
+
+  function startLevel(lv, raid) {
+    raidMode = !!raid; raidIndex = raid ? LEVELS.indexOf(lv) : 0;
     L = lv;
     solids = norm(lv.solids, true);
     oneways = norm(lv.oneways);
@@ -418,11 +441,13 @@ Z.infil = (function () {
         if (p.vy > 0) { land(b, prevBottom); }
         else if (p.vy < 0) { p.y = b.y + b.h + phh + 0.01; p.vy = 0; }
       }
-      // one-way platforms: only land when descending through the top edge
+      // one-way platforms: land whenever the feet cross the top edge this
+      // frame (feet were at/above the top last frame, at/below it now). No
+      // upper bound, so a fast fall can never tunnel straight through.
       if (p.vy >= 0) {
         for (const o of oneways) {
           if (p.x + pw * 0.7 < o.x || p.x - pw * 0.7 > o.x + o.w) continue;
-          if (prevBottom <= o.y + 6 && p.y >= o.y && p.y <= o.y + o.h + 4) { land(o, prevBottom); p.mover = o.move ? o : null; }
+          if (prevBottom <= o.y + 6 && p.y >= o.y) { land(o, prevBottom); p.mover = o.move ? o : null; }
         }
       }
     }
@@ -529,6 +554,8 @@ Z.infil = (function () {
     mode = 'done'; doneT = 0;
     const repeat = !!Z.state.campsDone[L.id];
     Z.state.campsDone[L.id] = true;
+    // grant the parkour haul (parts + scrap) up front so it's banked whether
+    // the boss fight is won or lost
     const parts = [];
     const n = repeat ? 1 : L.reward.parts + got.filter((k) => k === 'part').length;
     const floor = D.rarityRank(L.reward.rarity);
@@ -542,34 +569,94 @@ Z.infil = (function () {
     Z.state.stats.rareFinds += parts.filter((x) => D.rarityRank(x.rarity) >= 2).length;
     Z.state.persist(); Z.quests.check();
     Z.fx.confetti(Z.render.W / 2, Z.render.H * 0.4, 40); Z.audio.sfx.win();
+
+    // RAID: the exit opens onto the camp's boss mech — cut straight to combat.
+    if (raidMode) { startBoss(parts, scrap); return; }
+
+    // legacy DOM-select mode keeps the quiet haul cutscene + camp list
     Z.cutscene.play([
       { who: 'HAUL', text: 'Slipped out with ' + parts.map((x) => x.name).join(', ') + ' and ' + scrap + ' scrap.' + (deaths ? ' Reset ' + deaths + ' time' + (deaths > 1 ? 's' : '') + '. The tanuki forgives.' : ' A ghost in the depot. KANE-CO never knew.') },
     ], () => { mode = 'select'; document.getElementById('infilHud').style.display = 'none'; Z.controls.setMode('none'); renderSelect(); Z.ui.updateWallet(); });
   }
 
+  // Hand the finished raid off to a boss duel: player's built mech vs a
+  // camp boss scaled to the raid index. combat.start() switches to 'battle'.
+  function startBoss(parts, scrap) {
+    mode = 'battle';
+    const hud = document.getElementById('infilHud'); if (hud) hud.style.display = 'none';
+    const haul = parts.length ? parts.map((x) => x.name).join(', ') : (scrap + ' scrap');
+    Z.ui.toast('Grabbed ' + haul + ' — now the camp boss stands in your way.', 'gold');
+    const boss = pickBoss(raidIndex);
+    if (!boss) { Z.controls.setMode('none'); Z.ui.show('world'); return; }   // safety
+    const c = Z.Bot.compute(Z.state.build);
+    const playerSpec = c.spec;
+    playerSpec.name = Z.state.botName || playerSpec.name || 'YOUR MECH';
+    const rp = 22 + raidIndex * 16;
+    Z.combat.start(playerSpec, boss, { rp: rp });
+  }
+
   // ================================================================
   //  RENDER
   // ================================================================
+  // Hollow-Knight / Silksong flavored industrial sky: deep layered gradient,
+  // distant ink-silhouette machinery drifting on parallax, sodium haloes and
+  // a soft fog band. Kept moody but not muddy — platforms rim-light on top.
   function drawBackdrop(ctx, W, H, tt, scroll) {
     const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, '#141c26'); g.addColorStop(0.5, '#1a2330'); g.addColorStop(1, '#0c1118');
+    g.addColorStop(0, '#0f1822'); g.addColorStop(0.42, '#182231'); g.addColorStop(0.72, '#141d2a'); g.addColorStop(1, '#090d13');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    // sodium-lamp glows
+
+    // far silhouette skyline (two parallax layers of chimneys / gantries)
+    function skyline(par, baseY, col, seed) {
+      ctx.fillStyle = col;
+      const step = 150, off = -(scroll * par) % (step * 3);
+      ctx.beginPath(); ctx.moveTo(-40, H);
+      for (let x = -step * 3 + off; x < W + step * 3; x += step) {
+        const hsh = ((Math.sin((x * 0.7 + seed) * 12.9898) * 43758.5) % 1 + 1) % 1;
+        const bw = step * (0.42 + hsh * 0.4), bh = baseY * (0.32 + hsh * 0.6);
+        ctx.lineTo(x, H - baseY);
+        ctx.lineTo(x, H - baseY - bh);
+        ctx.lineTo(x + bw, H - baseY - bh);
+        ctx.lineTo(x + bw, H - baseY);
+        // a slim chimney on some blocks
+        if (hsh > 0.6) { const cx = x + bw * 0.7; ctx.lineTo(cx, H - baseY); ctx.lineTo(cx, H - baseY - bh * 1.4); ctx.lineTo(cx + 12, H - baseY - bh * 1.4); ctx.lineTo(cx + 12, H - baseY); }
+      }
+      ctx.lineTo(W + 40, H - baseY); ctx.lineTo(W + 40, H); ctx.closePath(); ctx.fill();
+    }
+    skyline(0.05, H * 0.30, 'rgba(24,34,48,.6)', 3.1);
+    skyline(0.1, H * 0.20, 'rgba(15,22,32,.75)', 91.7);
+
+    // sodium-lamp glows drifting behind the machinery
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    for (let i = 0; i < 3; i++) {
-      const bx = ((W * (0.2 + i * 0.34) - scroll * 0.08) % (W + 300) + (W + 300)) % (W + 300) - 150;
-      const by = H * (0.16 + (i % 2) * 0.08);
-      const rg = ctx.createRadialGradient(bx, by, 6, bx, by, 240);
-      rg.addColorStop(0, 'rgba(255,196,120,' + (0.12 + 0.03 * Math.sin(tt * 0.7 + i)) + ')');
-      rg.addColorStop(1, 'rgba(255,196,120,0)');
-      ctx.fillStyle = rg; ctx.fillRect(bx - 240, by - 240, 480, 480);
+    for (let i = 0; i < 4; i++) {
+      const bx = ((W * (0.16 + i * 0.26) - scroll * 0.09) % (W + 360) + (W + 360)) % (W + 360) - 180;
+      const by = H * (0.14 + (i % 2) * 0.09);
+      const rg = ctx.createRadialGradient(bx, by, 6, bx, by, 260);
+      rg.addColorStop(0, 'rgba(255,193,116,' + (0.13 + 0.03 * Math.sin(tt * 0.7 + i)) + ')');
+      rg.addColorStop(1, 'rgba(255,193,116,0)');
+      ctx.fillStyle = rg; ctx.fillRect(bx - 260, by - 260, 520, 520);
     }
     ctx.restore();
-    // haze band
-    ctx.fillStyle = 'rgba(20,32,44,.34)'; ctx.fillRect(0, H * 0.5, W, H * 0.5);
-    const mg = ctx.createLinearGradient(0, H * 0.44, 0, H * 0.72);
-    mg.addColorStop(0, 'rgba(150,178,196,0)'); mg.addColorStop(0.5, 'rgba(150,178,196,.05)'); mg.addColorStop(1, 'rgba(150,178,196,0)');
-    ctx.fillStyle = mg; ctx.fillRect(0, H * 0.44, W, H * 0.28);
+
+    // low haze / fog band so the depths sink into mist
+    const mg = ctx.createLinearGradient(0, H * 0.46, 0, H);
+    mg.addColorStop(0, 'rgba(120,150,172,0)'); mg.addColorStop(0.55, 'rgba(96,124,148,.07)'); mg.addColorStop(1, 'rgba(60,80,100,.14)');
+    ctx.fillStyle = mg; ctx.fillRect(0, H * 0.46, W, H * 0.54);
+  }
+
+  // drifting spore/fog puffs in the foreground (screen space, additive-soft)
+  function drawFog(ctx, W, H, dt, tt) {
+    if (!fog) { fog = []; for (let i = 0; i < 7; i++) fog.push({ x: Math.random() * W, y: H * (0.4 + Math.random() * 0.55), r: 90 + Math.random() * 160, vx: 4 + Math.random() * 8, a: 0.03 + Math.random() * 0.04, ph: Math.random() * 6 }); }
+    ctx.save();
+    for (const f of fog) {
+      f.x += f.vx * dt * 6; f.ph += dt;
+      const sx = ((f.x - camX * 0.16) % (W + f.r * 2) + (W + f.r * 2)) % (W + f.r * 2) - f.r;
+      const sy = f.y + Math.sin(f.ph) * 10;
+      const gg = ctx.createRadialGradient(sx, sy, 2, sx, sy, f.r);
+      gg.addColorStop(0, 'rgba(158,182,200,' + f.a.toFixed(3) + ')'); gg.addColorStop(1, 'rgba(158,182,200,0)');
+      ctx.fillStyle = gg; ctx.fillRect(sx - f.r, sy - f.r, f.r * 2, f.r * 2);
+    }
+    ctx.restore();
   }
 
   // parallax decor (screen space; each object drifts by its par factor)
@@ -584,14 +671,14 @@ Z.infil = (function () {
   }
 
   function drawMotes(ctx, W, H, dt) {
-    if (!motes) { motes = []; for (let i = 0; i < 30; i++) motes.push({ x: Math.random() * W, y: Math.random() * H, vy: 5 + Math.random() * 14, ph: Math.random() * 6, r: 0.8 + Math.random() * 1.8 }); }
+    if (!motes) { motes = []; for (let i = 0; i < 46; i++) motes.push({ x: Math.random() * W, y: Math.random() * H, vy: 4 + Math.random() * 14, ph: Math.random() * 6, r: 0.7 + Math.random() * 1.9, dp: 0.35 + Math.random() * 0.5 }); }
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     for (const m of motes) {
       m.ph += dt; m.y += m.vy * dt * 0.4;
       if (m.y > H + 10) { m.y = -8; m.x = Math.random() * W; }
-      const sx = ((m.x - camX * 0.5) % (W + 60) + (W + 60)) % (W + 60) - 30;
-      const a = 0.1 + 0.08 * Math.sin(m.ph * 1.6);
-      ctx.fillStyle = 'rgba(220,206,176,' + a.toFixed(3) + ')';
+      const sx = ((m.x - camX * m.dp) % (W + 60) + (W + 60)) % (W + 60) - 30;
+      const a = 0.09 + 0.08 * Math.sin(m.ph * 1.6);
+      ctx.fillStyle = 'rgba(220,210,182,' + a.toFixed(3) + ')';
       ctx.beginPath(); ctx.arc(sx + Math.sin(m.ph) * 8, m.y, m.r, 0, U.TAU); ctx.fill();
     }
     ctx.restore();
@@ -599,11 +686,20 @@ Z.infil = (function () {
 
   function drawSolid(ctx, o) {
     const na = o.w * aspect(o.tile);
-    if (na >= o.h - 2) { drawTile(ctx, o.tile, o.x, o.y, o.w, o.h); return; }
-    const g = ctx.createLinearGradient(0, o.y, 0, o.y + o.h);
-    g.addColorStop(0, '#5b5147'); g.addColorStop(1, '#2c2823');
-    ctx.fillStyle = g; ctx.fillRect(o.x, o.y, o.w, o.h);
-    drawTile(ctx, o.tile, o.x, o.y, o.w, na);   // textured cap on top
+    if (na >= o.h - 2) { drawTile(ctx, o.tile, o.x, o.y, o.w, o.h); }
+    else {
+      const g = ctx.createLinearGradient(0, o.y, 0, o.y + o.h);
+      g.addColorStop(0, '#4a4238'); g.addColorStop(1, '#241f1a');
+      ctx.fillStyle = g; ctx.fillRect(o.x, o.y, o.w, o.h);
+      drawTile(ctx, o.tile, o.x, o.y, o.w, na);   // textured cap on top
+    }
+    // pale rim light along the walkable top edge (silhouette read) — the
+    // hitbox top is exactly o.y, so this line marks the real collision surface
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const rl = ctx.createLinearGradient(0, o.y - 3, 0, o.y + 5);
+    rl.addColorStop(0, 'rgba(190,214,224,0)'); rl.addColorStop(0.5, 'rgba(190,214,224,.5)'); rl.addColorStop(1, 'rgba(190,214,224,0)');
+    ctx.fillStyle = rl; ctx.fillRect(o.x, o.y - 3, o.w, 8);
+    ctx.restore();
   }
 
   function drawExit(ctx, e, tt) {
@@ -695,28 +791,28 @@ Z.infil = (function () {
     const px = p.x, py = p.y, ph = PHYS[p.form];
     const gliding = p.form === 'paper' && !p.onG;
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    const rr = gliding ? 46 : 30;
-    const rl = ctx.createRadialGradient(px, py - 20, 2, px, py - 20, rr);
+    const rr = gliding ? 38 : 24;
+    const rl = ctx.createRadialGradient(px, py - 16, 2, px, py - 16, rr);
     rl.addColorStop(0, 'rgba(170,225,205,' + (gliding ? 0.22 : 0.1) + ')'); rl.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = rl; ctx.fillRect(px - rr, py - 20 - rr, rr * 2, rr * 2);
+    ctx.fillStyle = rl; ctx.fillRect(px - rr, py - 16 - rr, rr * 2, rr * 2);
     ctx.restore();
-    if (formPoof > 0) { ctx.save(); ctx.globalAlpha = formPoof * 2; ctx.fillStyle = '#f5ecd7'; ctx.beginPath(); ctx.arc(px, py - 22, 30 * (1 - formPoof), 0, U.TAU); ctx.fill(); ctx.restore(); }
+    if (formPoof > 0) { ctx.save(); ctx.globalAlpha = formPoof * 2; ctx.fillStyle = '#f5ecd7'; ctx.beginPath(); ctx.arc(px, py - 18, 24 * (1 - formPoof), 0, U.TAU); ctx.fill(); ctx.restore(); }
 
     if (p.form === 'tanuki') {
       const moving = Math.abs(p.vx) > 24 && p.onG;
-      Z.render.drawSprite('char.tanuki', px, py, { w: 62, facing: p.facing, bob: 0, squash: p.onG ? (p.squash > 0 ? -p.squash : Math.cos(p.walk * 18) * 0.04) : -0.06, anim: !p.onG ? 'jump' : moving ? 'walk' : 'idle', animT: moving ? p.walk : tt });
+      Z.render.drawSprite('char.tanuki', px, py, { w: 46, facing: p.facing, bob: 0, squash: p.onG ? (p.squash > 0 ? -p.squash : Math.cos(p.walk * 18) * 0.04) : -0.06, anim: !p.onG ? 'jump' : moving ? 'walk' : 'idle', animT: moving ? p.walk : tt });
     } else if (p.form === 'rock') {
       const sq = 1 + (p.squash > 0 ? p.squash : 0);
-      ctx.save(); ctx.translate(px, py); ctx.scale(1 / sq, sq);
+      ctx.save(); ctx.translate(px, py); ctx.scale((1 / sq) * 0.82, sq * 0.82);
       Z.render.paperFill(ctx, () => { ctx.beginPath(); ctx.moveTo(-19, 0); ctx.lineTo(-15, -26); ctx.lineTo(0, -34); ctx.lineTo(17, -24); ctx.lineTo(20, 0); ctx.closePath(); }, '#8f8577', { cut: 4 });
       ctx.strokeStyle = 'rgba(30,26,20,.4)'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(-8, -8); ctx.lineTo(2, -20); ctx.moveTo(6, -6); ctx.lineTo(12, -18); ctx.stroke();
       ctx.restore();
-      drawFace(ctx, px, py - 16, p.facing);
+      drawFace(ctx, px, py - 13, p.facing);
     } else if (p.form === 'paper') {
       const tilt = U.clamp(p.vy * 0.0006, -0.32, 0.34) * p.facing + (p.onG ? 0 : Math.sin(tt * 6) * 0.05);
-      Z.render.drawGlide(px, py - ph.ph * 0.5, { w: 118, facing: p.facing, animT: tt, tilt: tilt });
+      Z.render.drawGlide(px, py - ph.ph * 0.5, { w: 92, facing: p.facing, animT: tt, tilt: tilt });
     } else { // scissors
-      ctx.save(); ctx.translate(px, py - 18); ctx.scale(p.facing, 1); ctx.rotate(p.dashT > 0 ? -0.4 : Math.sin(tt * 6) * 0.08);
+      ctx.save(); ctx.translate(px, py - 15); ctx.scale(p.facing * 0.82, 0.82); ctx.rotate(p.dashT > 0 ? -0.4 : Math.sin(tt * 6) * 0.08);
       Z.render.paperFill(ctx, () => { ctx.beginPath(); ctx.moveTo(-4, 2); ctx.lineTo(22, -9); ctx.lineTo(-2, -4); ctx.closePath(); }, '#b8c0c8', { noShadow: true, cut: 2.6 });
       Z.render.paperFill(ctx, () => { ctx.beginPath(); ctx.moveTo(-4, -9); ctx.lineTo(22, 2); ctx.lineTo(-2, -2); ctx.closePath(); }, '#cfd6dd', { noShadow: true, cut: 2.6 });
       Z.render.paperFill(ctx, () => { ctx.beginPath(); ctx.arc(-9, -11, 7, 0, U.TAU); }, '#c0392b', { noShadow: true, cut: 2.6 });
@@ -733,15 +829,26 @@ Z.infil = (function () {
     ctx.restore();
   }
 
+  // pale rim light on a platform's walkable top edge (marks the real hitbox)
+  function topRim(ctx, x, y, w) {
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const rl = ctx.createLinearGradient(0, y - 3, 0, y + 5);
+    rl.addColorStop(0, 'rgba(190,214,224,0)'); rl.addColorStop(0.5, 'rgba(190,214,224,.5)'); rl.addColorStop(1, 'rgba(190,214,224,0)');
+    ctx.fillStyle = rl; ctx.fillRect(x, y - 3, w, 8); ctx.restore();
+  }
+
   function frame(dt, tt) {
+    if (mode === 'battle') return;                         // handed off to the boss fight
     const ctx = Z.render.ctx, W = Z.render.W, H = Z.render.H;
     Z.render.clear();
     drawBackdrop(ctx, W, H, tt, mode === 'play' ? camX : tt * 20);
-    if (mode === 'select') { drawMotes(ctx, W, H, dt); return; }
+    if (mode === 'select') { drawFog(ctx, W, H, dt, tt); drawMotes(ctx, W, H, dt); return; }
 
     p._wasG = p.onG; p._lastVy = p.vy;
     update(dt);
+    if (mode === 'battle') { Z.fx.renderScreen(ctx, W, H); return; }   // update() cut to the boss fight
 
+    drawFog(ctx, W, H, dt, tt);                            // mid-depth mist behind the level
     drawDecor(ctx, W, H);
 
     ctx.save(); ctx.translate((-camX + Z.fx.shakeX) | 0, (-camY + Z.fx.shakeY) | 0);
@@ -749,7 +856,7 @@ Z.infil = (function () {
     for (const o of solids) { ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = '#05090c'; ctx.fillRect(o.x + 5, o.y + 8, o.w, o.h); ctx.restore(); }
     for (const o of solids) drawSolid(ctx, o);
     for (const ld of ladders) drawTile(ctx, ld.tile, ld.x, ld.y, ld.w, ld.h);
-    for (const o of oneways) drawTile(ctx, o.tile, o.x, o.y, o.w, o.h);
+    for (const o of oneways) { drawTile(ctx, o.tile, o.x, o.y, o.w, o.h); topRim(ctx, o.x, o.y, o.w); }
     for (const f of fans) drawFan(ctx, f, tt);
     for (const hz of hazards) drawHazard(ctx, hz, tt);
     for (const c of crates) if (c.alive) drawTile(ctx, c.tile, c.x, c.y, c.w, c.h);
@@ -762,6 +869,10 @@ Z.infil = (function () {
     ctx.restore();
 
     drawMotes(ctx, W, H, dt);
+    // soft foreground vignette to seat the moody depth
+    const vg = ctx.createRadialGradient(W / 2, H * 0.5, H * 0.34, W / 2, H * 0.5, H * 0.95);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(3,6,10,.5)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
     Z.fx.renderScreen(ctx, W, H);
     // quiet HUD
     Z.render.pxText(ctx, FORM_LABEL[p.form], 18, H - 22, 12, SPIRIT, 'left');
@@ -772,5 +883,7 @@ Z.infil = (function () {
   function enter() { mode = 'select'; document.getElementById('infilHud').style.display = 'none'; renderSelect(); }
   function leave() { mode = 'select'; }
   function init() { Z.ui.onEnter('infil', enter); }
-  return { init, frame, get playing() { return mode === 'play'; }, leave };
+  // _dbg: harmless test seam (used by the headless verifier to reach the exit)
+  const _dbg = { warpExit() { if (!L || !p) return false; p.x = L.exit.x + L.exit.w / 2; p.y = L.exit.y + L.exit.h * 0.5; p.vx = 0; p.vy = 0; alarmT = 3; return true; }, get p() { return p; }, get mode() { return mode; } };
+  return { init, frame, startRaid, get playing() { return mode === 'play'; }, leave, _dbg };
 })();

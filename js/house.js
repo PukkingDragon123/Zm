@@ -1,36 +1,35 @@
 /* ================================================================
-   house.js — your walkable HOME. The round tanuki stands BIG in the
-   room (about 3x the old size) and walks A/D across the tatami. Three
-   diegetic spots read as clean paper cutouts against the photo of the
-   den: the CRAFTING TABLE (opens the workbench), the FUTON (rest), and
-   the DISPLAY SHELF where your finished build stands. The uploaded
-   backdrop is drawn clean — only a soft ground-contact shade so the
-   cutouts sit in the scene. Walk A/D, act with ENTER.
+   house.js — your HOME, the tanuki toy-shop. The uploaded exterior
+   photo is drawn CLEAN (only a soft ground-contact shade + a day/night
+   wash). A small round tanuki walks A/D across the front. Three cool,
+   minimal interact spots float as glowing orbs with a little pulsing
+   icon — no ugly label chips:
+     FUTON  -> sleep (jump to night)
+     SHELF  -> peek at your finished build (flavor)
+     TABLE  -> open the crafting workbench
+   Walk A/D, act with ENTER.
    ================================================================ */
 Z.house = (function () {
   const U = Z.util, D = Z.data;
-  const SPEED = 300;            // px/s top walk speed
-  const ACCEL = 12;            // smooth accel toward target velocity
-  const GREET = 'Home. Smells of cut sprue, warm solder, and last night tea.';
+  const SPEED = 220;            // px/s top walk speed (small scene)
+  const ACCEL = 12;
+  const GREET = 'The toy shop, warm and quiet. Glue, sprue, soft lamplight.';
 
   const kid = { x: -90, vx: 0, facing: 1, walk: 0, turn: 0 };
-  let greeted = false, bubble = null, nearSpot = null, spec = null;
+  let greeted = false, bubble = null, nearSpot = null;
+  let fade = 0, fadeDir = 0, fadeApplied = false;
 
   const spots = [
-    { id: 'bed',   fx: 0.18, label: 'FUTON',          kind: 'bed',   lift: 0 },
-    { id: 'shelf', fx: 0.50, label: 'DISPLAY SHELF',  kind: 'shelf', lift: 0 },
-    { id: 'bench', fx: 0.82, label: 'CRAFTING TABLE', kind: 'bench', lift: 0 },
+    { id: 'bed',   fx: 0.20, kind: 'bed',   color: '#8fb6ff', prompt: 'SLEEP', ph: 0.0, glyph: glyphMoon, glow: 0 },
+    { id: 'shelf', fx: 0.50, kind: 'shelf', color: '#8fd6a0', prompt: 'LOOK',  ph: 2.1, glyph: glyphStar, glow: 0 },
+    { id: 'bench', fx: 0.80, kind: 'bench', color: '#ffb457', prompt: 'BUILD', ph: 4.2, glyph: glyphBox,  glow: 0 },
   ];
-
-  function refreshSpec() {
-    try { spec = Z.Bot.compute(Z.state.build).spec; } catch (e) { spec = null; }
-  }
 
   function enter() {
     kid.x = -90; kid.vx = 0; kid.facing = 1; kid.walk = 0; kid.turn = 0;
     greeted = false; bubble = null; nearSpot = null;
-    spots.forEach((s) => (s.lift = 0));
-    refreshSpec();
+    fade = 0; fadeDir = 0; fadeApplied = false;
+    spots.forEach((s) => (s.glow = 0));
     Z.ui.updateWallet();
   }
 
@@ -38,19 +37,15 @@ Z.house = (function () {
   function openBench() { Z.audio.sfx.click(); Z.ui.show('workbench'); }
 
   function rest() {
+    if (fadeDir !== 0) return;
     Z.audio.sfx.click();
-    Z.cutscene.play([
-      { who: 'ZUMO', img: 'tanuki', side: 'right', text: 'You flop onto the futon. Servos tick as they cool and the reactor core settles to a low idle hum.' },
-    ], () => {
-      Z.audio.sfx.boost(); Z.fx.screenFlash(0.16, '#ffd98a');
-      Z.ui.toast('Rested. The den feels warm and quiet.', 'gold');
-    });
+    fadeDir = 1; fade = 0.001; fadeApplied = false;     // fade to black, flip to night at the peak
   }
 
   function inspectShelf() {
     Z.audio.sfx.click();
     const name = (Z.state.botName || 'your mech');
-    const ch = (D.chassisById(Z.state.build && Z.state.build.chassis) || {}).name || 'a bare frame';
+    const ch = ((D.chassisById && D.chassisById(Z.state.build && Z.state.build.chassis)) || {}).name || 'a bare frame';
     Z.cutscene.play([
       { who: 'ZUMO', img: 'tanuki', side: 'right', text: name + ' stands on the shelf, panel lines still fresh. Built on the ' + ch + '. Nippers and spare runners wait beside it.' },
     ]);
@@ -65,18 +60,30 @@ Z.house = (function () {
   // ---- the scene ----
   function frame(dt, t) {
     const ctx = Z.render.ctx, W = Z.render.W, H = Z.render.H;
-    const groundY = H * 0.88;
-    const fs = U.clamp(H / 560, 1, 1.9);                  // furniture / prop scale
-    const minX = W * 0.07, maxX = W * 0.93;
+    const groundY = H * 0.9;
+    const minX = W * 0.08, maxX = W * 0.92;
     const inScene = Z.cutscene && Z.cutscene.active;
+
+    // fade / rest state
+    if (fadeDir === 1) {
+      fade += dt * 1.8;
+      if (fade >= 1) {
+        fade = 1;
+        if (!fadeApplied) { fadeApplied = true; Z.state.setClock(21); Z.audio.sfx.boost(); Z.ui.toast('Night falls.', 'gold'); }
+        fadeDir = -1;
+      }
+    } else if (fadeDir === -1) {
+      fade -= dt * 1.2; if (fade <= 0) { fade = 0; fadeDir = 0; }
+    }
+    const busy = inScene || fadeDir !== 0;
 
     spots.forEach((s) => (s.x = W * s.fx));
 
     // ---- update ----
-    if (kid.x < minX) {                                   // walk in through the door
+    if (kid.x < minX) {                                   // walk in from the left
       kid.vx = SPEED; kid.x += SPEED * dt; kid.walk += dt; kid.facing = 1;
-      if (kid.x >= minX && !greeted) { greeted = true; bubble = { text: GREET, t: 4.8 }; }
-    } else if (!inScene) {
+      if (kid.x >= minX && !greeted) { greeted = true; bubble = { text: GREET, t: 4.4 }; }
+    } else if (!busy) {
       const dir = Z.controls ? Z.controls.dir : 0;
       if (dir && dir !== kid.facing) { kid.facing = dir; kid.turn = 1; }
       if (kid.turn > 0) kid.turn = Math.max(0, kid.turn - dt * 5);
@@ -88,134 +95,127 @@ Z.house = (function () {
     } else { kid.vx = 0; kid.walk = 0; }
     if (bubble) { bubble.t -= dt; if (bubble.t <= 0) bubble = null; }
 
-    const prevNear = nearSpot; nearSpot = null; let bd = 120 * fs;
-    spots.forEach((s) => { const d = Math.abs(kid.x - s.x); if (kid.x >= minX && d < bd) { bd = d; nearSpot = s; } });
-    spots.forEach((s) => { s.lift = U.lerp(s.lift, s === nearSpot ? 1 : 0, Math.min(1, dt * 10)); });
+    const prevNear = nearSpot; nearSpot = null; let bd = W * 0.09;
+    spots.forEach((s) => { const d = Math.abs(kid.x - s.x); if (kid.x >= minX && !busy && d < bd) { bd = d; nearSpot = s; } });
+    spots.forEach((s) => { s.glow = U.lerp(s.glow, s === nearSpot ? 1 : 0, Math.min(1, dt * 10)); });
     if (nearSpot && nearSpot !== prevNear && Z.audio.ctx) Z.audio.sfx.hover();
 
-    const act = !inScene && Z.controls && Z.controls.consumeInteract();
+    const act = !busy && Z.controls && Z.controls.consumeInteract();
     if (act && kid.x >= minX && nearSpot) actOn(nearSpot);
 
-    // ---- draw: clean photo backdrop ----
+    // ---- draw: clean toy-shop exterior ----
     Z.render.clear();
-    if (!Z.assets.cover(ctx, 'world.house', 0, 0, W, H, 0.5)) {
+    if (!Z.assets.cover(ctx, 'world.town', 0, 0, W, H, 0.5) &&
+        !Z.assets.cover(ctx, 'world.townview', 0, 0, W, H, 0.5)) {
       const g = ctx.createLinearGradient(0, 0, 0, H);
-      g.addColorStop(0, '#4a3421'); g.addColorStop(0.6, '#3a2818'); g.addColorStop(1, '#241810');
+      g.addColorStop(0, '#e7c9a0'); g.addColorStop(0.6, '#caa477'); g.addColorStop(1, '#8a6a45');
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     }
-    // soft ground-contact shade only (keeps the backdrop bright, grounds the cutouts)
-    const gg = ctx.createLinearGradient(0, groundY - H * 0.14, 0, H);
-    gg.addColorStop(0, 'rgba(38,22,10,0)'); gg.addColorStop(1, 'rgba(38,22,10,.42)');
-    ctx.fillStyle = gg; ctx.fillRect(0, groundY - H * 0.14, W, H - groundY + H * 0.14);
+    // soft ground-contact shade only (keeps the backdrop bright)
+    const gg = ctx.createLinearGradient(0, groundY - H * 0.12, 0, H);
+    gg.addColorStop(0, 'rgba(38,22,10,0)'); gg.addColorStop(1, 'rgba(38,22,10,.30)');
+    ctx.fillStyle = gg; ctx.fillRect(0, groundY - H * 0.12, W, H - groundY + H * 0.12);
 
-    // the three diegetic spots (ground glow + the object) drawn behind the tanuki
-    spots.forEach((s) => {
-      drawMarker(ctx, s, groundY, fs);
-      ctx.save(); ctx.translate(s.x, groundY); ctx.scale(fs, fs);
-      if (s.kind === 'bed') drawBed(ctx, t);
-      else if (s.kind === 'shelf') drawShelf(ctx, t);
-      else if (s.kind === 'bench') drawBench(ctx, t);
-      ctx.restore();
-    });
-
-    // the tanuki — BIG (about 3x the old size)
+    // the tanuki — small + cute
     const moving = Math.abs(kid.vx) > 6;
-    const w = U.clamp(H * 0.4, 200, 340);
-    const hop = moving ? Math.abs(Math.sin(kid.walk * 10)) * (H * 0.02) : Math.sin(t * 2.2) * (H * 0.006);
+    const w = U.clamp(H * 0.16, 90, 150);
+    const hop = moving ? Math.abs(Math.sin(kid.walk * 10)) * (H * 0.014) : Math.sin(t * 2.2) * (H * 0.004);
     const squash = moving ? Math.cos(kid.walk * 20) * 0.03 : Math.sin(t * 2.2) * 0.022;
     if (!Z.render.drawSprite('char.tanuki', kid.x, groundY, {
       w, bob: hop, squash, facing: kid.facing, turn: kid.turn,
       sway: moving ? Math.sin(kid.walk * 10) * 0.04 : 0,
       anim: moving ? 'walk' : 'idle', animT: moving ? kid.walk : t,
-    })) { ctx.fillStyle = '#7a5a3a'; ctx.fillRect(kid.x - w * 0.2, groundY - w * 0.6, w * 0.4, w * 0.6); }
-    if (moving && Math.random() < 0.22) Z.fx.dust(kid.x - kid.facing * w * 0.16, groundY, 1, '#c9a76b');
+    })) { ctx.fillStyle = '#7a5a3a'; ctx.fillRect(kid.x - w * 0.2, groundY - w * 0.9, w * 0.4, w * 0.9); }
+    if (moving && Math.random() < 0.2) Z.fx.dust(kid.x - kid.facing * w * 0.16, groundY, 1, '#c9a76b');
+
+    // gentle day/night wash over the scene + tanuki
+    timeTint(ctx, W, H);
+
+    // cool minimal interact spots (glowing orbs + pulsing icon), on top
+    const floatH = H * 0.15;
+    spots.forEach((s) => { if (kid.x >= minX) spotMarker(ctx, s.x, groundY, floatH, s.glow, t, s); });
 
     Z.fx.render(ctx);
-    if (bubble && !inScene) speechBubble(ctx, kid.x, groundY - Math.min(H * 0.62, w * 0.98), bubble.text);
-    spots.forEach((s) => { if (s.lift > 0.05 && !inScene) drawLabel(ctx, s, groundY, fs, t); });
+    if (bubble && !inScene && fade <= 0) speechBubble(ctx, kid.x, groundY - w * 1.02, bubble.text);
+    if (Z.clock && Z.clock.draw) Z.clock.draw(ctx, 40, 46);
     Z.render.drawPetals(t);
+
+    // rest fade — night settles over the shop
+    if (fade > 0) { ctx.save(); ctx.fillStyle = 'rgba(10,8,18,' + Math.min(1, fade).toFixed(3) + ')'; ctx.fillRect(0, 0, W, H); ctx.restore(); }
   }
 
-  // ---- diegetic furniture (drawn pre-scaled + pre-translated to the spot) ----
-  function drawMarker(ctx, s, groundY, fs) {
-    const hot = s.lift;
+  // ---- a clean glowing interact spot: ground glow + floating icon ----
+  function spotMarker(ctx, x, gy, floatH, glow, t, s) {
+    const pulse = 0.55 + 0.45 * Math.sin(t * 3.4 + s.ph);
+    const iy = gy - floatH - Math.sin(t * 2.4 + s.ph) * 3 - glow * 6;
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    const gw = (58 + hot * 40) * fs;
-    const gr = ctx.createRadialGradient(s.x, groundY - 6, 3, s.x, groundY - 6, gw);
-    gr.addColorStop(0, 'rgba(255,196,116,' + (0.14 + hot * 0.24).toFixed(3) + ')'); gr.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = gr; ctx.beginPath(); ctx.ellipse(s.x, groundY - 5, gw, gw * 0.4, 0, 0, U.TAU); ctx.fill();
+    const r = 24 + glow * 30;
+    const g = ctx.createRadialGradient(x, gy, 2, x, gy, r);
+    g.addColorStop(0, U.rgba(s.color, 0.07 + glow * 0.26)); g.addColorStop(1, U.rgba(s.color, 0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, gy, r, r * 0.38, 0, 0, U.TAU); ctx.fill();
+    const hr = 12 + glow * 9;
+    const hg = ctx.createRadialGradient(x, iy, 1, x, iy, hr);
+    hg.addColorStop(0, U.rgba(s.color, (0.18 + glow * 0.3) * pulse)); hg.addColorStop(1, U.rgba(s.color, 0));
+    ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(x, iy, hr, 0, U.TAU); ctx.fill();
     ctx.restore();
-  }
-
-  function drawBed(ctx, t) {
-    const P = (p, f, o) => Z.render.paperFill(ctx, p, f, o);
-    P(() => Z.render.roundRect(ctx, -60, -16, 120, 18, 6), '#b98d57', { cut: 3 });        // tatami base
-    P(() => Z.render.roundRect(ctx, -56, -30, 112, 20, 8), '#c0664c', { cut: 3 });        // quilt
-    ctx.strokeStyle = 'rgba(47,36,24,.25)'; ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.moveTo(-30, -28); ctx.lineTo(-30, -12); ctx.moveTo(8, -28); ctx.lineTo(8, -12); ctx.stroke();
-    P(() => Z.render.roundRect(ctx, -52, -42, 34, 16, 6), '#f3e7cc', { cut: 2.4 });        // pillow
-  }
-
-  function drawShelf(ctx, t) {
-    const P = (p, f, o) => Z.render.paperFill(ctx, p, f, o);
-    const shelfY = -66;
-    // side posts + two planks
-    P(() => Z.render.roundRect(ctx, -74, -132, 8, 132, 2), '#7a5836', { cut: 2.4, noShadow: true });
-    P(() => Z.render.roundRect(ctx, 66, -132, 8, 132, 2), '#7a5836', { cut: 2.4, noShadow: true });
-    P(() => Z.render.roundRect(ctx, -78, -128, 156, 10, 3), '#8a6a45', { cut: 3 });
-    P(() => Z.render.roundRect(ctx, -78, shelfY, 156, 11, 3), '#8a6a45', { cut: 3 });
-    // your current build, finished and standing on the lower shelf
-    if (spec) Z.render.drawBotSide(0, shelfY, 1, spec, { t, moving: false, wheel: 0 }, { scale: 0.5 });
-    // two small kit boxes on the upper shelf
-    for (let i = 0; i < 2; i++) {
-      const bx = -40 + i * 62, by = -128;
-      P(() => Z.render.roundRect(ctx, bx - 15, by - 26, 30, 26, 3), i ? '#d9c39a' : '#e7d6ac', { cut: 2.4 });
-      P(() => Z.render.roundRect(ctx, bx - 15, by - 26, 30, 7, 3), i ? '#c07b4a' : '#7f9e6a', { cut: 1.8, noShadow: true });
-    }
-  }
-
-  function drawBench(ctx, t) {
-    const P = (p, f, o) => Z.render.paperFill(ctx, p, f, o);
-    // table top + legs
-    ctx.fillStyle = '#6f4c2c'; ctx.fillRect(-56, -34, 8, 34); ctx.fillRect(48, -34, 8, 34);
-    P(() => Z.render.roundRect(ctx, -64, -48, 128, 14, 3), '#9a6b40', { cut: 3 });
-    ctx.strokeStyle = 'rgba(47,36,24,.28)'; ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.moveTo(-58, -40); ctx.lineTo(58, -40); ctx.stroke();
-    // a half-built frame torso clamped on the bench
-    P(() => Z.render.roundRect(ctx, -12, -78, 26, 30, 4), '#c9cdd6', { cut: 2.6 });
-    P(() => Z.render.roundRect(ctx, -9, -74, 20, 8, 2), '#8f9aa8', { cut: 1.6, noShadow: true });
-    ctx.fillStyle = '#7f9e6a'; ctx.beginPath(); ctx.arc(1, -60, 3, 0, U.TAU); ctx.fill();  // reactor glow dot
-    // nippers (open V) resting on the top
-    ctx.strokeStyle = '#5a5f66'; ctx.lineWidth = 3; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(28, -50); ctx.lineTo(40, -62); ctx.moveTo(34, -50); ctx.lineTo(46, -60); ctx.stroke();
-    ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 2.4;
-    ctx.beginPath(); ctx.moveTo(28, -50); ctx.lineTo(34, -50); ctx.stroke();
-  }
-
-  // floating paper label above a spot when the tanuki is near
-  function drawLabel(ctx, s, groundY, fs, t) {
-    const topOff = (s.kind === 'shelf' ? 150 : s.kind === 'bench' ? 96 : 58) * fs + 16;
-    const yTop = groundY - topOff;
+    // crisp cream glyph
     ctx.save();
-    ctx.globalAlpha = s.lift;
-    const sz = 14 * Math.min(1.5, fs);
-    const w = Math.max(120, s.label.length * (sz * 0.86) + 48) * 1, x = U.clamp(s.x, w / 2 + 8, Z.render.W - w / 2 - 8);
-    Z.render.paperFill(ctx, () => Z.render.roundRect(ctx, x - w / 2, yTop - 30, w, 30, 8), '#f5ecd7', { cut: 0.001 });
-    Z.render.pxText(ctx, s.label, x, yTop - 10, sz, '#2f2418', 'center');
-    ctx.globalAlpha = s.lift * (0.72 + 0.28 * Math.sin(t * 5));
-    Z.render.pxText(ctx, 'ENTER', x, yTop + 6 + Math.sin(t * 4) * 3, sz - 2, '#d94f30', 'center');
+    ctx.strokeStyle = U.rgba('#fff5e4', 0.72 + glow * 0.28);
+    ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    s.glyph(ctx, x, iy);
     ctx.restore();
+    if (glow > 0.55) Z.render.pxText(ctx, s.prompt, x, iy - 15, 9, U.rgba('#fff1d6', glow), 'center');
+  }
+
+  // ---- tiny icon glyphs (drawn with the current strokeStyle) ----
+  function glyphBox(ctx, x, y) {
+    ctx.beginPath(); ctx.rect(x - 6, y - 6, 12, 12); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x - 6, y - 1.5); ctx.lineTo(x + 6, y - 1.5); ctx.stroke();
+  }
+  function glyphMoon(ctx, x, y) {
+    ctx.beginPath(); ctx.arc(x + 1, y, 6, Math.PI * 0.36, Math.PI * 1.5); ctx.stroke();
+  }
+  function glyphStar(ctx, x, y) {
+    ctx.beginPath();
+    ctx.moveTo(x, y - 7); ctx.lineTo(x, y + 7);
+    ctx.moveTo(x - 7, y); ctx.lineTo(x + 7, y);
+    ctx.moveTo(x - 4, y - 4); ctx.lineTo(x + 4, y + 4);
+    ctx.moveTo(x - 4, y + 4); ctx.lineTo(x + 4, y - 4);
+    ctx.stroke();
   }
 
   function speechBubble(ctx, x, y, text) {
-    const lines = wrap(text, 26), w = 260, h = 22 + lines.length * 21;
+    const lines = wrap(text, 26), w = 210, h = 18 + lines.length * 19;
     const bx = U.clamp(x, w / 2 + 10, Z.render.W - w / 2 - 10);
-    Z.render.paperFill(ctx, () => Z.render.roundRect(ctx, bx - w / 2, y - h, w, h, 14), '#f5ecd7', { cut: 0.001 });
+    const by = Math.max(h + 10, y);
+    Z.render.paperFill(ctx, () => Z.render.roundRect(ctx, bx - w / 2, by - h, w, h, 12), '#f5ecd7', { cut: 0.001 });
     ctx.fillStyle = '#2f2418'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-    ctx.font = "700 16px 'Zen Maru Gothic', sans-serif";
-    lines.forEach((ln, i) => ctx.fillText(ln, bx, y - h + 26 + i * 21));
+    ctx.font = "700 14px 'Zen Maru Gothic', sans-serif";
+    lines.forEach((ln, i) => ctx.fillText(ln, bx, by - h + 24 + i * 19));
   }
   function wrap(t, n) { const w = t.split(' '), out = []; let l = ''; for (const word of w) { if ((l + word).length > n) { out.push(l.trim()); l = ''; } l += word + ' '; } if (l.trim()) out.push(l.trim()); return out; }
+
+  // gentle time-of-day wash: warm noon -> orange dusk -> cool blue night
+  function timeTint(ctx, W, H) {
+    const stops = [
+      [0, 38, 52, 104, 0.32], [5, 54, 58, 118, 0.26], [6, 240, 168, 110, 0.16],
+      [8, 255, 228, 186, 0.05], [12, 255, 244, 214, 0.0], [16, 255, 222, 172, 0.06],
+      [18, 255, 150, 84, 0.18], [19, 120, 96, 140, 0.22], [21, 48, 60, 120, 0.30],
+      [24, 38, 52, 104, 0.32],
+    ];
+    let hr = (Z.state && typeof Z.state.clock === 'number') ? Z.state.clock : 12;
+    hr = ((hr % 24) + 24) % 24;
+    let a = stops[0], b = stops[stops.length - 1];
+    for (let i = 0; i < stops.length - 1; i++) { if (hr >= stops[i][0] && hr <= stops[i + 1][0]) { a = stops[i]; b = stops[i + 1]; break; } }
+    const span = (b[0] - a[0]) || 1, f = U.clamp((hr - a[0]) / span, 0, 1);
+    const al = U.lerp(a[4], b[4], f);
+    if (al <= 0.002) return;
+    const r = U.lerp(a[1], b[1], f) | 0, g = U.lerp(a[2], b[2], f) | 0, bl = U.lerp(a[3], b[3], f) | 0;
+    ctx.save();
+    ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + bl + ',' + al.toFixed(3) + ')';
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
 
   function init() { Z.ui.onEnter('house', enter); }
   return { init, frame };

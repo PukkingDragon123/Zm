@@ -38,11 +38,12 @@ Z.combat = (function () {
   };
   const primaryWeapon = (spec) => (spec.weapons && spec.weapons[0]) ? spec.weapons[0].type : 'none';
 
-  // Big-and-grounded mech draw scale — sized to the screen (~2.5x the old
-  // 1.5) so the plastic frames fill the arena and read clearly.
+  // Small, cute toy-gundam draw scale — roughly a THIRD of the old big
+  // frames so the plastic mechs sit small in a clean, roomy arena with
+  // lots of visible background.
   function mechScale() {
     const H = Z.render.H || 720, W = Z.render.W || 1280;
-    return U.clamp(Math.min(H / 195, W / 285), 3.1, 4.3);
+    return U.clamp(Math.min(H / 585, W / 855), 1.05, 1.55);
   }
 
   function makeFighter(spec, isPlayer) {
@@ -540,6 +541,8 @@ Z.combat = (function () {
     const gg = ctx.createLinearGradient(0, stage.groundY - 8, 0, H);
     gg.addColorStop(0, 'rgba(18,10,6,0)'); gg.addColorStop(1, 'rgba(18,10,6,.28)');
     ctx.fillStyle = gg; ctx.fillRect(0, stage.groundY - 8, W, H - stage.groundY + 8);
+    // gentle day/night wash so the arena matches the town's clock
+    if (Z.clock && Z.clock.tint) Z.clock.tint(ctx, W, H);
   }
 
   // LOSING SCREEN — the pilot tanuki bolts across the arena and flees,
@@ -548,9 +551,9 @@ Z.combat = (function () {
     const gy = stage.groundY;
     const startX = W * 0.72;
     const x = startX - (defeatT * 300 + defeatT * defeatT * 260);   // accelerating flee
-    const w = U.clamp(H * 0.4, 210, 340);
+    const w = U.clamp(H * 0.16, 92, 150);
     const step = Math.sin(defeatT * 18);
-    const bob = Math.abs(step) * 13;                                // hard running bounce
+    const bob = Math.abs(step) * 7;                                 // hard running bounce
     if (x > -w && Math.random() < 0.7) Z.fx.dust(x + w * 0.24, gy, 2, '#cbb489');
     Z.render.drawSprite('char.tanuki', x, gy, { w, bob, squash: step * 0.06, facing: -1, anim: 'walk', animT: defeatT * 2.4, sway: -0.05 + step * 0.02 });
     Z.fx.render(ctx);
@@ -578,8 +581,8 @@ Z.combat = (function () {
     if (E) drawPuppeteer(ctx, stage.right + 74, stage.groundY, -1, E, opRightPress, false);
     // partner cheering behind the player
     if (partner) {
-      const bob = Math.abs(Math.sin(t * 3.2)) * (6 + crowdHype * 8);
-      Z.render.drawSprite('char.' + partner.id, stage.left - 150, stage.groundY, { w: U.clamp(H * 0.14, 96, 150), bob, squash: Math.sin(t * 6.4) * 0.04, facing: 1 });
+      const bob = Math.abs(Math.sin(t * 3.2)) * (5 + crowdHype * 6);
+      Z.render.drawSprite('char.' + partner.id, stage.left - 96, stage.groundY, { w: U.clamp(H * 0.1, 62, 104), bob, squash: Math.sin(t * 6.4) * 0.04, facing: 1 });
     }
 
     // dash afterimages
@@ -639,7 +642,7 @@ Z.combat = (function () {
     const bob = Math.abs(Math.sin(t * 2.6)) * 5 + press * 4;
     const key = isPlayer ? 'char.tanuki' : null;
     if (key) {
-      Z.render.drawSprite(key, x, groundY, { w: U.clamp(Z.render.H * 0.2, 128, 196), bob, squash: Math.sin(t * 5.2) * 0.035 + press * 0.05, facing: face, sway: Math.sin(t * 2) * 0.04 });
+      Z.render.drawSprite(key, x, groundY, { w: U.clamp(Z.render.H * 0.12, 74, 116), bob, squash: Math.sin(t * 5.2) * 0.035 + press * 0.05, facing: face, sway: Math.sin(t * 2) * 0.04 });
     } else {
       // KANE-CO handler: grey suit drone hovering with a briefcase
       ctx.save(); ctx.translate(x, groundY - 46 - bob); ctx.scale(face, 1);
@@ -674,7 +677,7 @@ Z.combat = (function () {
       ctx.fillStyle = g; ctx.fillRect(hx - 14, hy - 14, 28, 28);
       ctx.restore();
     }
-    if (isPlayer) Z.render.pxText(ctx, 'YOU', x, groundY - U.clamp(Z.render.H * 0.22, 150, 214) - bob, 11, '#ffe9bf', 'center');
+    if (isPlayer) Z.render.pxText(ctx, 'YOU', x, groundY - U.clamp(Z.render.H * 0.13, 82, 128) - bob, 10, '#ffe9bf', 'center');
   }
 
   function hud() {
