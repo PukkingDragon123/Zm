@@ -135,15 +135,24 @@ Z.render = (function () {
     'char.kappa': { key: 'sheet.kappa', cols: 4, rows: 2, anims: { walk: [[0, 1], [1, 1]], idle: [[0, 0], [1, 0]], jump: [[3, 1]], happy: [[3, 1]], talk: [[2, 0], [3, 0], [2, 1]] } },
     'glide.tanuki': { key: 'sheet.glide', cols: 3, rows: 1, anims: { glide: [[0, 0], [1, 0], [2, 0]] } },
   };
-  // Per-sheet content bounding boxes (source px), computed once from the image.
-  // Robust: if the pixels can't be read (e.g. a cross-origin-tainted canvas on
-  // some hosts) or the frame looks empty, we return null and the caller draws
-  // the plain cutout instead — so the character NEVER silently vanishes.
+  // Pre-baked per-frame content boxes (source px) for the uploaded sheets, so
+  // the walk animation works WITHOUT reading canvas pixels — getImageData throws
+  // on a tainted canvas (opening the game from file://), which used to silently
+  // drop the animation. Values were measured once from the art.
+  const SHEET_BB = {
+    'sheet.tanuki': { fw: 384, fh: 512, refW: 285, refH: 436, bb: { '0,0': { x: 77, y: 76, w: 285, h: 436 }, '1,0': { x: 433, y: 76, w: 279, h: 392 }, '2,0': { x: 779, y: 76, w: 373, h: 393 }, '3,0': { x: 1152, y: 82, w: 248, h: 386 }, '0,1': { x: 77, y: 512, w: 286, h: 346 }, '1,1': { x: 443, y: 537, w: 279, h: 386 }, '2,1': { x: 789, y: 547, w: 363, h: 376 }, '3,1': { x: 1152, y: 571, w: 235, h: 352 } } },
+    'sheet.kappa': { fw: 384, fh: 512, refW: 278, refH: 426, bb: { '0,0': { x: 106, y: 76, w: 251, h: 419 }, '1,0': { x: 465, y: 78, w: 243, h: 419 }, '2,0': { x: 787, y: 73, w: 278, h: 426 }, '3,0': { x: 1168, y: 75, w: 274, h: 419 }, '0,1': { x: 87, y: 542, w: 278, h: 403 }, '1,1': { x: 433, y: 543, w: 308, h: 395 }, '2,1': { x: 826, y: 539, w: 326, h: 403 }, '3,1': { x: 1152, y: 542, w: 300, h: 403 } } },
+    'sheet.glide': { fw: 629, fh: 512, refW: 436, refH: 500, bb: { '0,0': { x: 97, y: 6, w: 436, h: 500 }, '1,0': { x: 635, y: 29, w: 617, h: 455 }, '2,0': { x: 1335, y: 49, w: 475, h: 415 } } },
+  };
+  // Per-sheet content bounding boxes. Uses the pre-baked table when available
+  // (no pixel read); otherwise measures once, guarded against taint/empty.
   const sheetCache = new Map();
   function sheetInfo(def) {
     const im = Z.assets.img(def.key); if (!im) return null;
     const cached = sheetCache.get(def.key);
     if (cached) return cached.bad ? null : cached;
+    const baked = SHEET_BB[def.key];
+    if (baked) { const info = { fw: baked.fw, fh: baked.fh, bb: baked.bb, refW: baked.refW, refH: baked.refH }; sheetCache.set(def.key, info); return info; }
     let info;
     try {
       const scv = document.createElement('canvas'); scv.width = im.naturalWidth; scv.height = im.naturalHeight;
