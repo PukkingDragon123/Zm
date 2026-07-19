@@ -23,6 +23,8 @@ Z.save = (function () {
         scrap: state.scrap,
         rp: state.rp,
         rankTier: state.rankTier,
+        clock: state.clock,
+        dayCount: state.dayCount,
         inventory: state.inventory,
         build: state.build,
         botName: state.botName,

@@ -386,3 +386,17 @@ body.pad-on #pad.show{display:flex;}
   .talk-box img{width:84px; height:78px; top:-70px;}
   .cut-img{width:90px; height:84px; top:-76px;}
 }
+
+/* ---------- the tanuki's phone overlay ---------- */
+#phone{position:fixed; inset:0; z-index:56; display:none; align-items:center; justify-content:center;
+  background:rgba(20,14,8,.5); backdrop-filter:blur(2px);}
+#phone.on{display:flex; animation:phoneIn .22s ease;}
+@keyframes phoneIn{0%{opacity:0} 100%{opacity:1}}
+#phoneInner{position:relative; width:min(340px,86vw); height:min(680px,86vh); background:#1a1e28;
+  border:5px solid #11141c; border-radius:38px; box-shadow:0 20px 50px rgba(0,0,0,.5), inset 0 0 0 2px #2a3040;
+  overflow:hidden; display:flex; flex-direction:column;}
+#phoneNotch{position:absolute; top:0; left:50%; transform:translateX(-50%); width:120px; height:22px; background:#11141c; border-radius:0 0 14px 14px; z-index:2;}
+#phoneScreen{flex:1; overflow:auto; position:relative;}
+#phoneHome{height:44px; display:flex; align-items:center; justify-content:center;}
+#phoneHome::after{content:''; width:120px; height:5px; border-radius:3px; background:#3a4152;}
+@media (max-width:520px){ #phoneInner{width:92vw; height:88vh;} }

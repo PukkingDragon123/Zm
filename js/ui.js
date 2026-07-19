@@ -7,7 +7,7 @@ Z.ui = (function () {
   let current = 'boot';
   let returnScreen = 'world';
   const enterHooks = {}, ACTIONS = {};
-  const SCREENS = ['boot', 'title', 'world', 'menu', 'house', 'cave', 'workbench', 'shop', 'ramen', 'quests', 'crew', 'scavenge', 'ladder', 'battle', 'result', 'settings', 'how', 'infil'];
+  const SCREENS = ['boot', 'title', 'world', 'menu', 'house', 'cave', 'raidmap', 'workbench', 'shop', 'ramen', 'quests', 'crew', 'scavenge', 'ladder', 'battle', 'result', 'settings', 'how', 'infil'];
   const screenEl = (n) => document.querySelector(`.screen[data-screen="${n}"]`);
 
   function show(name) {
@@ -32,6 +32,7 @@ Z.ui = (function () {
     infil: ['KANE-CO CAMPS', 'sneak in, take back parts'],
     menu: ['NAVIGATOR', 'where to next'], house: ['HOME', 'your place'],
     cave: ['WORKSHOP CAVE', 'kits and components'],
+    raidmap: ['TONIGHT', 'pick a place to raid'],
   };
   let lastTitle = null;
   function transition(name) {
@@ -109,6 +110,7 @@ Z.ui = (function () {
     });
     document.getElementById('ui').addEventListener('pointerover', (e) => { if (e.target.closest('.pbtn,.pcard,.opp,.dish,.quest,.pile,.fbtn,.tool') && Z.audio && Z.audio.ctx) Z.audio.sfx.hover(); });
     registerAction('settings', () => { returnScreen = current === 'settings' ? returnScreen : current; show('settings'); });
+    registerAction('phone', () => { if (Z.phone) Z.phone.toggle(); });
     wireSettings();
   }
 

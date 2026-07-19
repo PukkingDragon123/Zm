@@ -17,6 +17,7 @@ Z.assets = (function () {
     'world.konbini':'assets/world/konbini.jpg',
     'world.izakaya':'assets/world/izakaya.jpg',
     'world.townview':   'assets/world/townview.jpg',      // crossroad / town map view
+    'world.town':       'assets/world/town.jpg',           // toy-shop = home exterior
     'world.house':      'assets/world/house_interior.jpg',// walkable home
     'world.workbench':  'assets/world/workbench.jpg',     // crafting bench close-up
     'battle.arena': 'assets/battle/arena.jpg',

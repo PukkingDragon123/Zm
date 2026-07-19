@@ -50,9 +50,18 @@
   <section class="screen" data-screen="world">
     <div class="world-hud">
       <div class="money paper-chip" id="worldMoney">0</div>
+      <button class="pbtn tiny" data-act="phone">PHONE</button>
       <button class="pbtn tiny" data-act="settings">MENU</button>
     </div>
     <div class="interact" id="interactPrompt"></div>
+  </section>
+
+  <!-- RAID MAP (night: pick a place to attack; canvas map) -->
+  <section class="screen" data-screen="raidmap">
+    <div class="interior seethru">
+      <div class="int-head"><button class="pbtn tiny" data-act="world">LEAVE</button><h2>TONIGHT'S TARGETS</h2><div class="int-money" id="raidMoney">0</div></div>
+      <div id="raidUI"></div>
+    </div>
   </section>
 
   <!-- PERSONA MENU (map + missions) -->
@@ -213,6 +222,9 @@
 <div id="toasts"></div>
 <div id="tip"></div>
 
+<!-- the tanuki's phone: quests (day) + raid map (night). populated by phone.js -->
+<div id="phone"><div id="phoneInner"><div id="phoneNotch"></div><div id="phoneScreen"></div><div id="phoneHome"></div></div></div>
+
 <script src="js/util.js"></script>
 <script src="js/assets.js"></script>
 <script src="js/audio.js"></script>
@@ -238,6 +250,8 @@
 <script src="js/house.js"></script>
 <script src="js/cave.js"></script>
 <script src="js/menu.js"></script>
+<script src="js/clock.js"></script>
+<script src="js/phone.js"></script>
 <script src="js/combat.js"></script>
 <script src="js/game.js"></script>
 </body>

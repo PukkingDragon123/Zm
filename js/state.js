@@ -6,6 +6,8 @@ Z.state = (function () {
 
   const s = {
     credits: 0, scrap: 0, rp: 0, rankTier: 1,
+    clock: 9,             // hours 0..24 — day is for chores, night is for raids
+    dayCount: 1,
     inventory: {},        // { itemId: count }  (parts AND chassis)
     build: null,
     botName: 'RUST-01',
@@ -44,6 +46,7 @@ Z.state = (function () {
       s.scrap = saved.scrap ?? 0;
       s.rp = saved.rp ?? 0;
       s.rankTier = saved.rankTier ?? 1;
+      s.clock = saved.clock ?? 9; s.dayCount = saved.dayCount ?? 1;
       s.inventory = saved.inventory || {};
       s.build = saved.build || JSON.parse(JSON.stringify(D.START.build));
       s.botName = saved.botName || 'RUST-01';
@@ -178,6 +181,12 @@ Z.state = (function () {
     get tutorialSeen() { return s.tutorialSeen; }, set tutorialSeen(v) { s.tutorialSeen = v; },
     get scavengeCost() { return s.scavengeCost; }, set scavengeCost(v) { s.scavengeCost = v; },
     get buff() { return s.buff; },
+    // ---- day/night clock ----
+    get clock() { return s.clock; }, set clock(h) { s.clock = ((h % 24) + 24) % 24; },
+    get dayCount() { return s.dayCount; },
+    get isNight() { return s.clock < 6 || s.clock >= 19; },
+    advanceClock(h) { s.clock += h; while (s.clock >= 24) { s.clock -= 24; s.dayCount++; } persist(); },
+    setClock(h) { s.clock = ((h % 24) + 24) % 24; persist(); },
     setBuff(b) { s.buff = b; persist(); },
     takeBuff() { const b = s.buff; s.buff = null; persist(); return b; },
     // ---- crew friendship (rank 1-5, 30 xp per rank) ----
