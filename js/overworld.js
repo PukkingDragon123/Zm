@@ -3,21 +3,19 @@
    round tanuki stands small in the middle; WALK TO AN EDGE and you
    slip through to another place. No signboards:
      walk off the LEFT  edge  -> HOME
-     walk off the RIGHT edge  -> AO'S RAMEN
-     press ENTER in the middle -> EQUIPMENT CAVE
-   Faint edge chevrons hint where each side goes; a soft glowing
-   torii marks the middle door. Background is the star.
+     walk off the RIGHT edge  -> AO'S RAMEN (and past it, the CAVE)
+   Faint edge chevrons hint where each side goes. Background is the
+   star.
    ================================================================ */
 Z.overworld = (function () {
   const U = Z.util;
   const ACCEL = 12;
   const LEFT = { screen: 'house', name: 'HOME' };
   const RIGHT = { screen: 'ramen', name: "AO'S RAMEN" };
-  const MID = { screen: 'cave', name: 'WORKSHOP' };
   let kid = { fx: 0.5, vx: 0, facing: 1, walk: 0, turn: 0 };
-  let started = false, warp = 0, midGlow = 0;
+  let started = false, warp = 0;
 
-  function enter() { started = true; kid.fx = 0.5; kid.vx = 0; warp = 0.35; midGlow = 0; }   // spawn safely mid-street
+  function enter() { started = true; kid.fx = 0.5; kid.vx = 0; warp = 0.35; }   // spawn safely mid-street
 
   function frame(dt, t) {
     const W = Z.render.W, H = Z.render.H, ctx = Z.render.ctx;
@@ -42,9 +40,6 @@ Z.overworld = (function () {
         if (kid.fx <= 0.04 && dir < 0) return go(LEFT);
         if (kid.fx >= 0.96 && dir > 0) return go(RIGHT);
       }
-      // middle: ENTER opens the equipment cave
-      const mid = kid.fx > 0.36 && kid.fx < 0.64;
-      if (mid && Z.controls && Z.controls.consumeInteract()) return go(MID);
     }
 
     // ---- draw: clean cherry-tree street ----
@@ -79,12 +74,6 @@ Z.overworld = (function () {
     // gentle day/night wash over the whole street + tanuki
     timeTint(ctx, W, H);
 
-    // the workshop door: a soft glowing spot + a little floating torii
-    // that pulses; a tiny prompt shows only when you stand in the middle
-    const mid = kid.fx > 0.36 && kid.fx < 0.64;
-    midGlow = U.lerp(midGlow, mid ? 1 : 0, Math.min(1, dt * 8));
-    if (midGlow > 0.01) drawGate(ctx, W * 0.5, groundY, groundY - H * 0.17 - midGlow * 6, midGlow, t);
-
     if (Z.clock && Z.clock.draw) Z.clock.draw(ctx, 40, 46);
     Z.render.drawPetals(t);
   }
@@ -93,35 +82,6 @@ Z.overworld = (function () {
     const prompt = document.getElementById('interactPrompt'); if (prompt) prompt.classList.remove('show');
     kid.vx = 0; if (Z.audio) Z.audio.sfx.click();
     Z.ui.show(dest.screen);
-  }
-
-  // a soft glowing spot on the crossing + a small floating torii icon
-  function drawGate(ctx, x, gy, iy, glow, t) {
-    const pulse = 0.55 + 0.45 * Math.sin(t * 4);
-    ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    const r = 40 + glow * 34;
-    const g = ctx.createRadialGradient(x, gy, 3, x, gy, r);
-    g.addColorStop(0, U.rgba('#ffc478', 0.10 + glow * 0.22)); g.addColorStop(1, U.rgba('#ffc478', 0));
-    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, gy, r, r * 0.34, 0, 0, U.TAU); ctx.fill();
-    const hr = 15 + glow * 8;
-    const hg = ctx.createRadialGradient(x, iy, 1, x, iy, hr);
-    hg.addColorStop(0, U.rgba('#ffe0a6', (0.20 + glow * 0.3) * pulse)); hg.addColorStop(1, U.rgba('#ffe0a6', 0));
-    ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(x, iy, hr, 0, U.TAU); ctx.fill();
-    ctx.restore();
-    // little torii strokes
-    ctx.save();
-    ctx.strokeStyle = U.rgba('#fff1d6', 0.5 + glow * 0.5); ctx.lineWidth = 2.4; ctx.lineCap = 'round';
-    const hw = 9, top = iy - 9, postB = iy + 8;
-    ctx.beginPath();
-    ctx.moveTo(x - hw, top); ctx.lineTo(x - hw, postB);
-    ctx.moveTo(x + hw, top); ctx.lineTo(x + hw, postB);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(x - hw - 4, top); ctx.lineTo(x + hw + 4, top);
-    ctx.moveTo(x - hw - 1, top + 5); ctx.lineTo(x + hw + 1, top + 5);
-    ctx.stroke();
-    ctx.restore();
-    if (glow > 0.55) Z.render.pxText(ctx, 'ENTER', x, iy - 16, 9, U.rgba('#fff1d6', glow), 'center');
   }
 
   // faint glowing chevron hugging one screen edge; brighter + a whisper

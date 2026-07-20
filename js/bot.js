@@ -6,27 +6,16 @@
 Z.Bot = (function () {
   const U = Z.util;
 
-  function emptyBuild(chassisId) {
-    const ch = Z.data.chassisById(chassisId) || Z.data.chassis[0];
-    return {
-      chassis: ch.id,
-      generator: null,
-      motor: null,
-      wheels: null,
-      weapon: new Array(ch.slots.weapon).fill(null),
-      armor: new Array(ch.slots.armor).fill(null),
-      utility: new Array(ch.slots.utility).fill(null),
-    };
+  const SLOTS = ['body', 'head', 'arm', 'weapon', 'special'];
+
+  function emptyBuild() {
+    return { body: null, head: null, arm: null, weapon: null, special: null };
   }
 
-  // Return the list of equipped part objects (skips nulls/missing).
+  // Return the list of equipped part objects across the 5 slots (skips nulls).
   function equippedParts(build) {
     const out = [];
-    const push = (id) => { const p = Z.data.partById(id); if (p) out.push(p); };
-    push(build.generator); push(build.motor); push(build.wheels);
-    (build.weapon || []).forEach(push);
-    (build.armor || []).forEach(push);
-    (build.utility || []).forEach(push);
+    SLOTS.forEach((k) => { const p = Z.data.itemById(build && build[k]); if (p) out.push(p); });
     return out;
   }
 
@@ -63,13 +52,15 @@ Z.Bot = (function () {
     };
   }
 
-  // Compute display stats + spec from a player build.
+  // Compute display stats + spec from a 5-slot build (body/head/arm/weapon/special).
   function compute(build) {
-    const ch = Z.data.chassisById(build.chassis) || Z.data.chassis[0];
-    const agg = { hp: ch.baseHp, weight: ch.weight, power: 6, speed: 6, traction: ch.traction, armor: 0, energyProvide: 0, energyDraw: 0 };
+    build = build || {};
+    const agg = { hp: 30, weight: 14, power: 6, speed: 6, traction: 8, armor: 0, energyProvide: 20, energyDraw: 0 };
     const weapons = [];
+    const bodyPart = Z.data.itemById(build.body);
     for (const p of equippedParts(build)) {
       const s = p.stats || {};
+      if (p.baseHp != null) { agg.hp += p.baseHp; agg.weight += p.weight || 0; agg.traction += p.traction || 0; }  // a frame in the body slot
       agg.hp += s.hp || 0; agg.weight += s.weight || 0; agg.power += s.power || 0;
       agg.speed += s.speed || 0; agg.traction += s.traction || 0; agg.armor += s.armor || 0;
       agg.energyProvide += s.energyProvide || 0; agg.energyDraw += s.energyDraw || 0;
@@ -77,12 +68,12 @@ Z.Bot = (function () {
         weapons.push({ type: p.weapon.type, damage: p.weapon.damage || 6, cooldown: p.weapon.cooldown || 0.6, knockback: p.weapon.knockback || 40, name: p.name });
       }
     }
-    const spec = deriveSpec(agg, { name: Z.state ? Z.state.botName : ch.name, accent: '#1ff7ff', weapons, chassisId: ch.id, build });
-    const ready = !!(build.motor && build.wheels);
+    const spec = deriveSpec(agg, { name: Z.state ? Z.state.botName : 'UNIT', accent: '#1ff7ff', weapons, chassisId: build.body, build });
+    const ready = !!(build.body && build.arm);          // needs at least a body + arms to move
     return {
-      chassis: ch, agg, spec, weapons,
+      chassis: bodyPart || { name: 'No Frame', slots: {} }, agg, spec, weapons,
       ready,
-      hasGen: !!build.generator,
+      hasGen: !!build.head,
       slotsFilled: equippedParts(build).length,
     };
   }

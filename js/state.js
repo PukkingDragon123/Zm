@@ -70,19 +70,27 @@ Z.state = (function () {
     return s;
   }
 
-  // Ensure the build's slot arrays match its chassis (in case of data changes).
+  // Normalise the build to the 5-slot model {body,head,arm,weapon,special},
+  // migrating any older 7-slot save shape into it.
   function migrateBuild() {
-    const ch = D.chassisById(s.build && s.build.chassis) || D.chassis[0];
     const b = s.build || {};
-    b.chassis = ch.id;
-    ['weapon', 'armor', 'utility'].forEach((k) => {
-      const n = ch.slots[k];
-      if (!Array.isArray(b[k])) b[k] = [];
-      b[k].length = n;
-      for (let i = 0; i < n; i++) if (b[k][i] === undefined) b[k][i] = null;
-    });
-    ['generator', 'motor', 'wheels'].forEach((k) => { if (b[k] === undefined) b[k] = null; });
-    s.build = b;
+    if (!('body' in b) || !('head' in b) || !('arm' in b)) {
+      const pick = (id) => (id && D.itemById(id) ? id : null);
+      const firstOf = (arr) => (Array.isArray(arr) ? arr.find(Boolean) : arr) || null;
+      const nb = {
+        body: pick(b.chassis) || pick(firstOf(b.armor)) || null,
+        head: pick(b.generator) || null,
+        arm: pick(b.motor) || pick(b.wheels) || null,
+        weapon: pick(firstOf(b.weapon)) || null,
+        special: pick(firstOf(b.utility)) || null,
+      };
+      s.build = nb;
+    } else {
+      ['body', 'head', 'arm', 'weapon', 'special'].forEach((k) => { if (b[k] === undefined) b[k] = null; });
+      s.build = b;
+    }
+    // if the fresh 5-slot save is missing a body/arm entirely, seed from START
+    if (!s.build.body && !s.build.arm) s.build = JSON.parse(JSON.stringify(D.START.build));
   }
 
   function persist() { Z.save.save(s); }
@@ -110,11 +118,7 @@ Z.state = (function () {
   function equippedCount(id) {
     const b = s.build; if (!b) return 0;
     let c = 0;
-    if (b.chassis === id) c++;
-    if (b.generator === id) c++;
-    if (b.motor === id) c++;
-    if (b.wheels === id) c++;
-    ['weapon', 'armor', 'utility'].forEach((k) => (b[k] || []).forEach((x) => { if (x === id) c++; }));
+    ['body', 'head', 'arm', 'weapon', 'special'].forEach((k) => { if (b[k] === id) c++; });
     return c;
   }
   function availableCount(id) { return invCount(id) - equippedCount(id); }

@@ -12,7 +12,7 @@ Z.cave = (function () {
   const U = Z.util, D = Z.data;
   const UNLOCK = { common: 1, uncommon: 2, rare: 3, epic: 4, legendary: 6 };
   const scrapPrice = (p) => Math.ceil(p / 5);
-  const catOf = (it) => (it.slots ? 'chassis' : it.category);
+  const catOf = (it) => D.mechSlotOf(it);                // 5-slot model: body/head/arm/weapon/special
   const SPEED = 210, KEEPER = 'Oni Keeper';
   const GREET = 'Kits on the shelves, tanuki. Panel lines are extra.';
 
@@ -60,11 +60,11 @@ Z.cave = (function () {
     const all = D.parts.concat(D.chassis), rank = Z.state.rankTier;
     const open = (it) => rank >= (UNLOCK[it.rarity] || 1);
     const picks = [];
-    ['chassis', 'generator', 'motor', 'wheels', 'weapon', 'armor', 'utility'].forEach((cat) => {
+    ['body', 'head', 'arm', 'weapon', 'special'].forEach((cat) => {
       const pool = all.filter((it) => catOf(it) === cat && open(it));
       if (pool.length) picks.push(U.choice(pool));
     });
-    const extraPool = all.filter((it) => (catOf(it) === 'weapon' || catOf(it) === 'utility') && open(it) && picks.indexOf(it) < 0);
+    const extraPool = all.filter((it) => (catOf(it) === 'weapon' || catOf(it) === 'special') && open(it) && picks.indexOf(it) < 0);
     if (extraPool.length) picks.push(U.choice(extraPool));
     picks.sort((a, b) => a.price - b.price);
     stock = picks.map((it) => ({ it, locked: false }));
@@ -268,7 +268,7 @@ Z.cave = (function () {
     ctx.beginPath(); ctx.moveTo(-bw / 2 + 4, -bh + 15); ctx.lineTo(bw / 2 - 4, -bh + 15); ctx.stroke();
     const sz = 28;
     ctx.drawImage(s.cv, -sz / 2, -bh + 14, sz, sz);
-    Z.render.pxText(ctx, s.locked ? 'SEALED' : (D.CAT_LABEL[catOf(s.it)] || 'KIT'), 0, -5, 8, s.locked ? '#8a2f22' : '#5a4a30', 'center');
+    Z.render.pxText(ctx, s.locked ? 'SEALED' : ((D.MECH_SLOTS.find((m) => m.key === catOf(s.it)) || {}).label || 'KIT'), 0, -5, 8, s.locked ? '#8a2f22' : '#5a4a30', 'center');
     ctx.restore();
   }
 

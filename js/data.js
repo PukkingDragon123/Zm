@@ -295,24 +295,34 @@ Z.data = (function () {
   function rarityColor(r) { return (RARITY[r] || RARITY.common).color; }
   function rarityRank(r) { return (RARITY[r] || RARITY.common).i; }
 
-  // Starting loadout for a fresh save.
+  // ---------------- 5-COMPONENT MECH MODEL ----------------
+  // Every mech is exactly five parts. Each old part/chassis category folds
+  // into one of these five slots; the workbench + shop show only these.
+  const MECH_SLOTS = [
+    { key: 'body',    label: 'BODY',    box: 'box.body',    from: ['chassis', 'armor'] },
+    { key: 'head',    label: 'HEAD',    box: 'box.head',    from: ['generator'] },
+    { key: 'arm',     label: 'ARM',     box: 'box.arm',     from: ['motor', 'wheels'] },
+    { key: 'weapon',  label: 'WEAPON',  box: 'box.weapon',  from: ['weapon'] },
+    { key: 'special', label: 'SPECIAL', box: 'box.special', from: ['utility'] },
+  ];
+  const _slotByCat = {}; MECH_SLOTS.forEach((s) => s.from.forEach((c) => (_slotByCat[c] = s.key)));
+  function mechSlotOf(item) { if (!item) return 'special'; const c = item.slots ? 'chassis' : item.category; return _slotByCat[c] || 'special'; }
+
+  // Starting loadout for a fresh save — one part per slot.
   const START = {
     credits: 220,
     scrap: 12,
     inventory: {
-      cha_rustpan: 1, cha_alleycat: 1,
+      cha_rustpan: 1, cha_alleycat: 1, arm_tinskirt: 1,
       gen_dynamo: 1, mot_junker: 1, whl_casters: 1,
-      wpn_shiv: 1, wpn_kicker: 1, arm_tinskirt: 1, utl_ducttape: 1,
+      wpn_shiv: 1, wpn_kicker: 1, utl_ducttape: 1,
     },
-    build: {
-      chassis: 'cha_rustpan', generator: 'gen_dynamo', motor: 'mot_junker', wheels: 'whl_casters',
-      weapon: ['wpn_shiv'], armor: ['arm_tinskirt'], utility: ['utl_ducttape'],
-    },
+    build: { body: 'cha_rustpan', head: 'gen_dynamo', arm: 'mot_junker', weapon: 'wpn_shiv', special: 'utl_ducttape' },
     botName: 'RUST-01',
   };
 
   return {
-    PAL, RARITY, CAT_ICON, CAT_LABEL, WPN_ICON, WPN_LABEL,
+    PAL, RARITY, CAT_ICON, CAT_LABEL, WPN_ICON, WPN_LABEL, MECH_SLOTS, mechSlotOf,
     chassis, parts, enemies, ranks, quests, style, START,
     BUILDINGS, AREAS, NPCS, RAMEN, STREET_LEN, CROSSROAD_X,
     CREW, MISSIONS, DISTRICTS, AO_LINES, BOOT_LINES, LORE,

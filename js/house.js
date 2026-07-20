@@ -13,25 +13,35 @@ Z.house = (function () {
   const U = Z.util, D = Z.data;
   const SPEED = 220;            // px/s top walk speed (small scene)
   const ACCEL = 12;
-  const GREET = 'The toy shop, warm and quiet. Glue, sprue, soft lamplight.';
+  const GREET_OUT = 'Home. The little tanuki toy shop. Step up to the door and ENTER.';
+  const GREET_IN = 'Inside the toy shop, warm and quiet. Glue, sprue, soft lamplight.';
 
   const kid = { x: -90, vx: 0, facing: 1, walk: 0, turn: 0 };
-  let greeted = false, bubble = null, nearSpot = null;
+  let greeted = false, bubble = null, nearSpot = null, inside = false;
   let fade = 0, fadeDir = 0, fadeApplied = false;
 
+  // interior interact spots
   const spots = [
     { id: 'bed',   fx: 0.20, kind: 'bed',   color: '#8fb6ff', prompt: 'SLEEP', ph: 0.0, glyph: glyphMoon, glow: 0 },
     { id: 'shelf', fx: 0.50, kind: 'shelf', color: '#8fd6a0', prompt: 'LOOK',  ph: 2.1, glyph: glyphStar, glow: 0 },
     { id: 'bench', fx: 0.80, kind: 'bench', color: '#ffb457', prompt: 'BUILD', ph: 4.2, glyph: glyphBox,  glow: 0 },
   ];
+  // exterior: a single glowing door — ENTER to step inside
+  const doorSpot = { id: 'door', fx: 0.5, kind: 'door', color: '#ffd08a', prompt: 'ENTER', ph: 0, glyph: glyphDoor, glow: 0 };
+  // interior: a door back out to the street
+  const outSpot = { id: 'out', fx: 0.08, kind: 'out', color: '#cbe0ff', prompt: 'GO OUT', ph: 1, glyph: glyphDoor, glow: 0 };
+
+  function activeSpots() { return inside ? spots.concat(outSpot) : [doorSpot]; }
 
   function enter() {
     kid.x = -90; kid.vx = 0; kid.facing = 1; kid.walk = 0; kid.turn = 0;
-    greeted = false; bubble = null; nearSpot = null;
+    greeted = false; bubble = null; nearSpot = null; inside = false;   // always arrive outside
     fade = 0; fadeDir = 0; fadeApplied = false;
-    spots.forEach((s) => (s.glow = 0));
+    spots.forEach((s) => (s.glow = 0)); doorSpot.glow = 0; outSpot.glow = 0;
     Z.ui.updateWallet();
   }
+  function goInside() { Z.audio.sfx.click(); inside = true; kid.x = -90; kid.vx = 0; kid.facing = 1; greeted = false; bubble = null; }
+  function goOutside() { Z.audio.sfx.back(); inside = false; kid.x = -90; kid.vx = 0; kid.facing = 1; greeted = false; bubble = null; }
 
   // ---- spot actions ----
   function openBench() { Z.audio.sfx.click(); Z.ui.show('workbench'); }
@@ -45,14 +55,16 @@ Z.house = (function () {
   function inspectShelf() {
     Z.audio.sfx.click();
     const name = (Z.state.botName || 'your mech');
-    const ch = ((D.chassisById && D.chassisById(Z.state.build && Z.state.build.chassis)) || {}).name || 'a bare frame';
+    const ch = ((D.itemById && D.itemById(Z.state.build && Z.state.build.body)) || {}).name || 'a bare frame';
     Z.cutscene.play([
       { who: 'ZUMO', img: 'tanuki', side: 'right', text: name + ' stands on the shelf, panel lines still fresh. Built on the ' + ch + '. Nippers and spare runners wait beside it.' },
     ]);
   }
 
   function actOn(s) {
-    if (s.kind === 'bench') openBench();
+    if (s.kind === 'door') goInside();
+    else if (s.kind === 'out') goOutside();
+    else if (s.kind === 'bench') openBench();
     else if (s.kind === 'bed') rest();
     else if (s.kind === 'shelf') inspectShelf();
   }
@@ -76,13 +88,14 @@ Z.house = (function () {
       fade -= dt * 1.2; if (fade <= 0) { fade = 0; fadeDir = 0; }
     }
     const busy = inScene || fadeDir !== 0;
+    const sp = activeSpots();
 
-    spots.forEach((s) => (s.x = W * s.fx));
+    sp.forEach((s) => (s.x = W * s.fx));
 
     // ---- update ----
     if (kid.x < minX) {                                   // walk in from the left
       kid.vx = SPEED; kid.x += SPEED * dt; kid.walk += dt; kid.facing = 1;
-      if (kid.x >= minX && !greeted) { greeted = true; bubble = { text: GREET, t: 4.4 }; }
+      if (kid.x >= minX && !greeted) { greeted = true; bubble = { text: inside ? GREET_IN : GREET_OUT, t: 4.4 }; }
     } else if (!busy) {
       const dir = Z.controls ? Z.controls.dir : 0;
       if (dir && dir !== kid.facing) { kid.facing = dir; kid.turn = 1; }
@@ -96,19 +109,20 @@ Z.house = (function () {
     if (bubble) { bubble.t -= dt; if (bubble.t <= 0) bubble = null; }
 
     const prevNear = nearSpot; nearSpot = null; let bd = W * 0.09;
-    spots.forEach((s) => { const d = Math.abs(kid.x - s.x); if (kid.x >= minX && !busy && d < bd) { bd = d; nearSpot = s; } });
-    spots.forEach((s) => { s.glow = U.lerp(s.glow, s === nearSpot ? 1 : 0, Math.min(1, dt * 10)); });
+    sp.forEach((s) => { const d = Math.abs(kid.x - s.x); if (kid.x >= minX && !busy && d < bd) { bd = d; nearSpot = s; } });
+    sp.forEach((s) => { s.glow = U.lerp(s.glow, s === nearSpot ? 1 : 0, Math.min(1, dt * 10)); });
     if (nearSpot && nearSpot !== prevNear && Z.audio.ctx) Z.audio.sfx.hover();
 
     const act = !busy && Z.controls && Z.controls.consumeInteract();
     if (act && kid.x >= minX && nearSpot) actOn(nearSpot);
 
-    // ---- draw: clean toy-shop exterior ----
+    // ---- draw: toy-shop exterior (outside) or the walkable interior (inside)
     Z.render.clear();
-    if (!Z.assets.cover(ctx, 'world.town', 0, 0, W, H, 0.5) &&
-        !Z.assets.cover(ctx, 'world.townview', 0, 0, W, H, 0.5)) {
+    const bgKey = inside ? 'world.house' : 'world.town';
+    if (!Z.assets.cover(ctx, bgKey, 0, 0, W, H, 0.5)) {
       const g = ctx.createLinearGradient(0, 0, 0, H);
-      g.addColorStop(0, '#e7c9a0'); g.addColorStop(0.6, '#caa477'); g.addColorStop(1, '#8a6a45');
+      if (inside) { g.addColorStop(0, '#3a2e22'); g.addColorStop(0.6, '#5a4632'); g.addColorStop(1, '#2c2016'); }
+      else { g.addColorStop(0, '#e7c9a0'); g.addColorStop(0.6, '#caa477'); g.addColorStop(1, '#8a6a45'); }
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     }
     // soft ground-contact shade only (keeps the backdrop bright)
@@ -133,12 +147,12 @@ Z.house = (function () {
 
     // cool minimal interact spots (glowing orbs + pulsing icon), on top
     const floatH = H * 0.15;
-    spots.forEach((s) => { if (kid.x >= minX) spotMarker(ctx, s.x, groundY, floatH, s.glow, t, s); });
+    sp.forEach((s) => { if (kid.x >= minX) spotMarker(ctx, s.x, groundY, floatH, s.glow, t, s); });
 
     Z.fx.render(ctx);
     if (bubble && !inScene && fade <= 0) speechBubble(ctx, kid.x, groundY - w * 1.02, bubble.text);
     if (Z.clock && Z.clock.draw) Z.clock.draw(ctx, 40, 46);
-    Z.render.drawPetals(t);
+    if (!inside) Z.render.drawPetals(t);
 
     // rest fade — night settles over the shop
     if (fade > 0) { ctx.save(); ctx.fillStyle = 'rgba(10,8,18,' + Math.min(1, fade).toFixed(3) + ')'; ctx.fillRect(0, 0, W, H); ctx.restore(); }
@@ -174,6 +188,14 @@ Z.house = (function () {
   }
   function glyphMoon(ctx, x, y) {
     ctx.beginPath(); ctx.arc(x + 1, y, 6, Math.PI * 0.36, Math.PI * 1.5); ctx.stroke();
+  }
+  function glyphDoor(ctx, x, y) {
+    // a little arched doorway with a knob
+    ctx.beginPath();
+    ctx.moveTo(x - 5, y + 7); ctx.lineTo(x - 5, y - 3);
+    ctx.arc(x, y - 3, 5, Math.PI, 0); ctx.lineTo(x + 5, y + 7); ctx.closePath();
+    ctx.stroke();
+    ctx.beginPath(); ctx.arc(x + 2.5, y + 2, 1, 0, U.TAU); ctx.stroke();
   }
   function glyphStar(ctx, x, y) {
     ctx.beginPath();

@@ -271,10 +271,8 @@ Z.render = (function () {
   // =================================================================
   function getVisual(spec) {
     const v = spec._vis; if (v) return v;
-    const b = spec.build;
-    let plate = 0;
-    if (b) plate = (b.armor || []).filter(Boolean).length; else plate = U.clamp(Math.round((spec.armor || 0) / 14), 0, 4);
-    const corp = !b;                                       // enemies = KANE-CO grunt frames
+    const plate = U.clamp(Math.round((spec.armor || 0) / 14), 0, 4);
+    const corp = !spec.build;                              // enemies = KANE-CO grunt frames
     const accent = spec.accent || (corp ? '#ff4436' : PAL.spirit);
     // hero mech: bright ceramic armor + accent trim · corp mech: gunmetal + red optics
     const pal = corp

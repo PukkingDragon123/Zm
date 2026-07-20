@@ -11,8 +11,9 @@
 Z.workbench = (function () {
   const U = Z.util, $ = U.$, D = Z.data, PAL = D.PAL;
   // category order + mech-term labels (from data)
-  const CATS = ['chassis', 'generator', 'motor', 'wheels', 'weapon', 'armor', 'utility'];
-  const LABEL = D.CAT_LABEL;                              // {chassis:'FRAME',...}
+  const CATS = D.MECH_SLOTS.map((s) => s.key);           // ['body','head','arm','weapon','special']
+  const LABEL = {}; D.MECH_SLOTS.forEach((s) => (LABEL[s.key] = s.label));
+  const BOX = {}; D.MECH_SLOTS.forEach((s) => (BOX[s.key] = s.box));
 
   let overlay = null;                                    // invisible pointer catcher
   let W = 0, H = 0, px = 0, groundY = 0, turnX = 1;
@@ -25,27 +26,9 @@ Z.workbench = (function () {
   let turnPhase = 0, lampT = 0, mScale = 3;
   const icons = new Map();
 
-  // ---- build helpers (state behaviour identical to the old bench) ----
-  function slotVal(s) {
-    const b = Z.state.build;
-    if (s.cat === 'chassis') return b.chassis;
-    if (s.cat === 'generator' || s.cat === 'motor' || s.cat === 'wheels') return b[s.cat];
-    return (b[s.cat] || [])[s.index];
-  }
-  function setSlot(s, id) {
-    const b = Z.state.build;
-    if (s.cat === 'generator' || s.cat === 'motor' || s.cat === 'wheels') b[s.cat] = id;
-    else b[s.cat][s.index] = id;
-  }
-  function swapChassis(id) {
-    if (Z.state.build.chassis === id) return false;
-    if (Z.state.availableCount(id) < 1) { Z.audio.sfx.error(); return false; }
-    const ob = Z.state.build, nch = D.chassisById(id);
-    const nb = { chassis: id, generator: ob.generator, motor: ob.motor, wheels: ob.wheels, weapon: [], armor: [], utility: [] };
-    ['weapon', 'armor', 'utility'].forEach((k) => { nb[k] = new Array(nch.slots[k]).fill(null); for (let i = 0; i < nch.slots[k] && i < (ob[k] || []).length; i++) nb[k][i] = ob[k][i]; });
-    Z.state.build = nb; Z.state.persist();
-    return true;
-  }
+  // ---- build helpers (5-slot model: body/head/arm/weapon/special) ----
+  function slotVal(s) { return Z.state.build[s.cat] || null; }
+  function setSlot(s, id) { Z.state.build[s.cat] = id; }
 
   // ---- readout DOM (same format as the old bench) ----
   function readout() {
@@ -70,8 +53,7 @@ Z.workbench = (function () {
     catList = [];
     Object.keys(Z.state.inventory).forEach((id) => {
       const it = D.itemById(id); if (!it) return;
-      const cat = it.slots ? 'chassis' : it.category;
-      if (cat !== openCat) return;
+      if (D.mechSlotOf(it) !== openCat) return;
       if (Z.state.invCount(id) <= 0) return;
       catList.push({ it, avail: Z.state.availableCount(id) });
     });
@@ -147,17 +129,13 @@ Z.workbench = (function () {
     const spec = comp.spec, scale = mechScale(), s = scale * (spec.radius / 40);
     const legH = 26 * s, torsoW = 30 * s, torsoH = 30 * s;
     const hipY = groundY - legH, chestY = hipY - torsoH;
-    const ch = D.chassisById(Z.state.build.chassis);
     const rBig = U.clamp(20 * s, 26, 40), rSm = U.clamp(13 * s, 18, 26);
-    const gapV = U.clamp(24 * s, 30, 44);
     const add = (cat, index, dx, y, r) => sockets.push({ cat, index, x: px + dx * turnX, y, r, dx });
-    add('chassis', 0, 0, chestY + torsoH * 0.52, rBig);
-    add('generator', 0, 0, chestY + torsoH * 0.30, rSm);
-    add('motor', 0, 0, hipY - 2 * s, rSm);
-    add('wheels', 0, 5 * s, groundY - 2 * s, rSm);
-    for (let i = 0; i < ch.slots.weapon; i++) add('weapon', i, torsoW * 0.98, chestY + torsoH * 0.12 + i * gapV, rSm);
-    for (let i = 0; i < ch.slots.armor; i++) add('armor', i, -torsoW * 1.0, chestY + torsoH * 0.12 + i * gapV, rSm);
-    for (let i = 0; i < ch.slots.utility; i++) add('utility', i, -torsoW * 0.56, chestY + torsoH * 0.66 + i * gapV, rSm);
+    add('head', 0, 0, chestY - torsoH * 0.34, rSm);       // head on top
+    add('body', 0, 0, chestY + torsoH * 0.5, rBig);       // torso frame
+    add('arm', 0, 0, hipY - 2 * s, rSm);                  // drive / arms
+    add('weapon', 0, torsoW * 0.98, chestY + torsoH * 0.12, rSm);
+    add('special', 0, -torsoW * 1.0, chestY + torsoH * 0.12, rSm);   // backpack module
   }
   function socketOf(cat, index) { for (const s of sockets) if (s.cat === cat && s.index === index) return s; return null; }
 
@@ -175,7 +153,6 @@ Z.workbench = (function () {
     let best = null, bd = 1e9;
     for (const s of sockets) {
       if (!slotVal(s)) continue;                          // only filled sockets store
-      if (s.cat === 'chassis') continue;                  // frame can't be removed
       const d = Math.hypot(x - s.x, y - s.y), r = Math.max(34, s.r + 8);
       if (d < r && d < bd) { bd = d; best = s; }
     }
@@ -187,7 +164,7 @@ Z.workbench = (function () {
     const it = pc.en.it;
     if (pc.en.avail <= 0) { Z.audio.sfx.error(); return; }
     drag = {
-      item: it, cat: it.slots ? 'chassis' : it.category, srcId: it.id,
+      item: it, cat: D.mechSlotOf(it), srcId: it.id,
       x: pc.cx, y: pc.cy, tx: pc.cx, ty: pc.cy, vx: 0, rot: 0, popT: 0,
       homeX: pc.cx, homeY: pc.cy,
     };
@@ -201,8 +178,7 @@ Z.workbench = (function () {
     const soc = nearestSocket(d.cat, d.tx, d.ty);
     if (!soc) { Z.audio.sfx.back(); flyBack(d); return; }
     let ok = false;
-    if (d.cat === 'chassis') ok = swapChassis(d.item.id);
-    else if (Z.state.availableCount(d.item.id) < 1) { Z.audio.sfx.error(); ok = false; }
+    if (Z.state.availableCount(d.item.id) < 1) { Z.audio.sfx.error(); ok = false; }
     else { setSlot(soc, d.item.id); Z.state.persist(); ok = true; }
     if (!ok) { flyBack(d); return; }
     snap(soc, d.item);
@@ -382,7 +358,7 @@ Z.workbench = (function () {
     } else {
       // equipped sockets: a small tap-to-store bolt node
       for (const sc of sockets) {
-        if (sc.cat === 'chassis' || !slotVal(sc)) continue;
+        if (!slotVal(sc)) continue;
         boltStud(ctx, sc.x, sc.y, t);
       }
     }
@@ -398,11 +374,19 @@ Z.workbench = (function () {
     // --- parts box (corner, spare tally) ---
     drawBox(ctx, t);
 
-    // --- category tabs ---
+    // --- category tabs: the mystery-box art + label ---
     for (const tb of tabs) {
       const on = openCat === tb.cat, y = tb.y - (on ? 3 : 0);
       Z.render.paperFill(ctx, () => Z.render.roundRect(ctx, tb.x, y, tb.w, tb.h, 6), on ? '#8a6a45' : '#5a4630', { cut: 3, noShadow: !on });
-      Z.render.pxText(ctx, tb.label, tb.x + tb.w / 2, y + tb.h - 8, tb.w < 58 ? 6 : 7, on ? '#ffd98a' : '#d8c8a4', 'center');
+      const bx = Z.assets.img(BOX[tb.cat]);
+      if (bx) {
+        const bs = tb.h - 8, aw = bs * (bx.naturalWidth / bx.naturalHeight);
+        ctx.save(); if (!on) ctx.globalAlpha = 0.82;
+        ctx.drawImage(bx, tb.x + (tb.w - aw) / 2, y + 3, aw, bs);
+        ctx.restore();
+      } else {
+        Z.render.pxText(ctx, tb.label, tb.x + tb.w / 2, y + tb.h - 8, tb.w < 58 ? 6 : 7, on ? '#ffd98a' : '#d8c8a4', 'center');
+      }
     }
 
     // --- the runner / sprue with the category's pieces ---

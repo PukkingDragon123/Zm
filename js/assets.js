@@ -29,6 +29,8 @@ Z.assets = (function () {
     'cave.shop':        'assets/cave/shop.jpg',           // oni model-kit shop
     'infil.forest': 'assets/infil/forest.jpg',
   };
+  // mech component boxes (mystery-box art): body / head / arm / weapon / special
+  ['body', 'head', 'arm', 'weapon', 'special'].forEach((k) => { MANIFEST['box.' + k] = 'assets/box/' + k + '.png'; });
   // industrial obby tiles t00..t44 (sliced from the uploaded sheet)
   for (let i = 0; i < 45; i++) { const n = 't' + String(i).padStart(2, '0'); MANIFEST['tile.' + n] = 'assets/tiles/' + n + '.png'; }
   const imgs = {}, status = {};
