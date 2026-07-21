@@ -32,12 +32,50 @@ Z.quests = (function () {
     if (q.rewardPartId) { Z.state.addItem(q.rewardPartId, 1); const it = D.itemById(q.rewardPartId); if (it) Z.ui.toast('Got ' + it.name, 'gold'); }
     if (q.rewardRp) Z.game.awardRp(q.rewardRp);
     Z.state.persist(); Z.audio.sfx.rank(); Z.ui.toast('Bounty done: ' + q.title, 'gold'); render();
+    renderObjective(); updateBadge();
   }
   function check() {
     const now = new Set(D.quests.filter(claimable).map((q) => q.id));
     now.forEach((id) => { if (!lastClaim.has(id)) Z.ui.toast('Bounty ready: ' + D.quests.find((x) => x.id === id).title); });
     lastClaim = now;
+    renderObjective(); updateBadge();
   }
+
+  // ---------- current objective (surfaced in town + phone) ----------
+  function nextMission() {
+    const undone = D.MISSIONS.filter((m) => !Z.state.missionsDone[m.id]).sort((a, b) => a.minRank - b.minRank);
+    const ready = undone.filter((m) => Z.state.rankTier >= m.minRank);
+    return ready[0] || undone[0] || null;
+  }
+  // returns { tag, title, sub, pct } describing what to do next, or null
+  function objInfo() {
+    const cb = D.quests.filter(claimable).sort((a, b) => rankOf(a) - rankOf(b))[0];
+    if (cb) return { tag: 'READY TO COLLECT', title: cb.title, sub: 'Open the board on your phone to claim it', pct: 1 };
+    const m = nextMission();
+    if (m) {
+      const locked = Z.state.rankTier < m.minRank;
+      const dist = D.districtById(m.district);
+      return {
+        tag: 'OBJECTIVE', title: m.title,
+        sub: locked ? ('Reach rank ' + m.minRank + ' to take this request') : ('Request board' + (dist ? ' — free ' + dist.name : '')),
+        pct: 0,
+      };
+    }
+    if (Z.state.won) return { tag: 'SPIRIT TOWN', title: 'The town is free. Rest easy, keeper.', sub: '', pct: 1 };
+    return { tag: 'OBJECTIVE', title: 'Win the last district back', sub: 'Check the request board', pct: 1 };
+  }
+  function renderObjective() {
+    const el = document.getElementById('objSlip'); if (!el) return;
+    const o = objInfo(); if (!o) { el.style.display = 'none'; return; }
+    el.style.display = '';
+    el.innerHTML = `<span class="obj-tag">${o.tag}</span><b>${o.title}</b>` + (o.sub ? `<span class="obj-sub">${o.sub}</span>` : '');
+  }
+  function updateBadge() {
+    const b = document.getElementById('phoneBadge'); if (!b) return;
+    const n = claimableCount();
+    b.style.display = n > 0 ? '' : 'none'; b.textContent = n > 0 ? String(n) : '';
+  }
+  function openBoard() { Z.audio && Z.audio.sfx.click(); Z.ui.show('quests'); }
 
   // ---------- render ----------
   function render() {
@@ -132,6 +170,12 @@ Z.quests = (function () {
   }
   function rankOf(q) { return claimable(q) ? 0 : claimed(q) ? 2 : 1; }
 
-  function init() { Z.ui.onEnter('quests', render); lastClaim = new Set(D.quests.filter(claimable).map((q) => q.id)); }
-  return { init, render, check, claimableCount, progress };
+  function init() {
+    Z.ui.onEnter('quests', render);
+    Z.ui.onEnter('world', () => { renderObjective(); updateBadge(); });
+    const slip = document.getElementById('objSlip');
+    if (slip) slip.addEventListener('click', openBoard);
+    lastClaim = new Set(D.quests.filter(claimable).map((q) => q.id));
+  }
+  return { init, render, check, claimableCount, progress, objInfo, renderObjective, updateBadge, openBoard };
 })();

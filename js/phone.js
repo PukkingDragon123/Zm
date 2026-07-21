@@ -148,8 +148,8 @@ Z.phone = (function () {
     const apps = U.el('div', 'ph-apps');
 
     const quest = U.el('div', 'ph-app');
-    quest.innerHTML = `<div class="ph-ic">${IC_QUEST}</div><div class="ph-name">QUESTS</div><div class="ph-note">daily-life to-do</div>`;
-    quest.addEventListener('click', () => { Z.audio && Z.audio.sfx.click(); view = 'quests'; render(); });
+    quest.innerHTML = `<div class="ph-ic">${IC_QUEST}</div><div class="ph-name">QUESTS</div><div class="ph-note">the town request board</div>`;
+    quest.addEventListener('click', () => { Z.audio && Z.audio.sfx.click(); close(); Z.ui.show('quests'); });
     apps.appendChild(quest);
 
     const raidKnown = !Z.story || Z.story.seen('b1_night');   // Ao introduces the camps first
@@ -350,5 +350,6 @@ Z.phone = (function () {
     if (home) { home.style.cursor = 'pointer'; home.addEventListener('click', close); }
   }
 
-  return { init, toggle, mapFrame, startRaid };
+  function openQuests() { close(); Z.ui.show('quests'); }
+  return { init, toggle, mapFrame, startRaid, openQuests };
 })();

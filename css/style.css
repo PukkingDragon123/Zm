@@ -107,6 +107,18 @@ body.no-crt #grain{display:none;}
 .interact.show{display:block;}
 @keyframes hop{50%{transform:translate(-50%,-6px);}}
 
+/* current-objective slip (top-left of town) + phone claim badge */
+.world-hud .pbtn{position:relative;}
+.ph-badge{position:absolute; top:-6px; right:-6px; min-width:16px; height:16px; padding:0 4px; border-radius:9px;
+  background:var(--verm); color:#fff7ea; border:2px solid var(--paper); font-family:var(--disp); font-size:9px;
+  line-height:14px; text-align:center; box-shadow:var(--shadow); display:none;}
+.obj-slip{position:absolute; left:50%; transform:translateX(-50%); top:12px; max-width:min(68vw,320px); text-align:center;
+  padding:7px 16px 8px; border-radius:12px; cursor:pointer; box-shadow:var(--shadow); line-height:1.25; transition:transform .12s; z-index:4;}
+.obj-slip:hover{transform:translate(-50%,-2px);}
+.obj-slip .obj-tag{display:block; font-family:var(--disp); font-size:8.5px; letter-spacing:1.5px; color:var(--verm);}
+.obj-slip b{font-family:var(--disp); font-size:13px; color:var(--ink); display:block; margin-top:1px;}
+.obj-slip .obj-sub{display:block; font-size:10.5px; color:var(--ink2); margin-top:2px;}
+
 /* ---------- interiors ---------- */
 .interior{position:absolute; inset:0; display:flex; flex-direction:column;}
 .interior::before{content:''; position:absolute; inset:0; background:rgba(30,20,10,.34); pointer-events:none;}
