@@ -18,7 +18,7 @@ Z.ui = (function () {
     screenEl(name).classList.add('active');
     transition(name);
     // controller mode
-    if (Z.controls) Z.controls.setMode((name === 'world' || name === 'shop' || name === 'house' || name === 'cave') ? 'world' : name === 'battle' ? 'battle' : 'none');
+    if (Z.controls) Z.controls.setMode((name === 'world' || name === 'shop' || name === 'house' || name === 'cave' || name === 'ramen') ? 'world' : name === 'battle' ? 'battle' : 'none');
     if (Z.audio) Z.audio.setMode(name === 'battle' ? 'combat' : 'menu');
     (enterHooks[name] || []).forEach((fn) => { try { fn(); } catch (e) { console.error(e); } });
     updateWallet();

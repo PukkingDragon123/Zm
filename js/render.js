@@ -140,7 +140,10 @@ Z.render = (function () {
   // on a tainted canvas (opening the game from file://), which used to silently
   // drop the animation. Values were measured once from the art.
   const SHEET_BB = {
-    'sheet.tanuki': { fw: 500, fh: 563, refW: 486, refH: 512, bb: { '0,0': { x: 100, y: 26, w: 371, h: 511 }, '1,0': { x: 564, y: 26, w: 364, h: 511 }, '2,0': { x: 1014, y: 26, w: 486, h: 512 }, '3,0': { x: 1500, y: 35, w: 323, h: 502 } } },
+    // ax = feet/contact centre (absolute source x) so every walk frame anchors to
+    // the SAME body axis; without it the poses drift left in their cells and the
+    // tail appears to swing in front of the tanuki.
+    'sheet.tanuki': { fw: 411, fh: 563, refW: 367, refH: 512, bb: { '0,0': { x: 20, y: 26, w: 371, h: 511, ax: 220 }, '1,0': { x: 435, y: 26, w: 364, h: 511, ax: 631 }, '2,0': { x: 844, y: 26, w: 367, h: 512, ax: 1051 }, '3,0': { x: 1263, y: 35, w: 352, h: 502, ax: 1451 } } },
     'sheet.kappa': { fw: 384, fh: 512, refW: 278, refH: 426, bb: { '0,0': { x: 106, y: 76, w: 251, h: 419 }, '1,0': { x: 465, y: 78, w: 243, h: 419 }, '2,0': { x: 787, y: 73, w: 278, h: 426 }, '3,0': { x: 1168, y: 75, w: 274, h: 419 }, '0,1': { x: 87, y: 542, w: 278, h: 403 }, '1,1': { x: 433, y: 543, w: 308, h: 395 }, '2,1': { x: 826, y: 539, w: 326, h: 403 }, '3,1': { x: 1152, y: 542, w: 300, h: 403 } } },
     'sheet.glide': { fw: 629, fh: 512, refW: 436, refH: 500, bb: { '0,0': { x: 97, y: 6, w: 436, h: 500 }, '1,0': { x: 635, y: 29, w: 617, h: 455 }, '2,0': { x: 1335, y: 49, w: 475, h: 415 } } },
   };
@@ -207,6 +210,9 @@ Z.render = (function () {
     c2.globalCompositeOperation = 'source-in'; c2.fillStyle = '#f5ecd7'; c2.fillRect(0, 0, cv2.width, cv2.height);
     c.drawImage(cv2, 0, 0);
     c.drawImage(im, bb.x, bb.y, bb.w, bb.h, pad, pad, dw, dh);
+    // consistent horizontal anchor: feet-centre when baked, else box-centre
+    const ax = (bb.ax != null ? bb.ax : bb.x + bb.w / 2);
+    cv._ax = pad + (ax - bb.x) * k;
     cv._pad = pad; cv._w = dw; cv._h = dh;
     frameCache.set(ck, cv);
     return cv;
@@ -253,7 +259,7 @@ Z.render = (function () {
       const fi = Math.floor((opts.animT || 0) * fps);
       let fr = null; try { fr = getSheetFrame(key, opts.anim, fi, w); } catch (e) { fr = null; }
       // anchor the trimmed frame by its OWN width/height so feet sit on groundY
-      if (fr) { ctx.drawImage(fr, -fr._w / 2 - fr._pad, -fr._h - fr._pad); drawn = true; }
+      if (fr) { ctx.drawImage(fr, -(fr._ax != null ? fr._ax : fr._w / 2 + fr._pad), -fr._h - fr._pad); drawn = true; }
     }
     if (!drawn) {
       let cut = null; try { cut = getCutout(key, w); } catch (e) { cut = null; }
