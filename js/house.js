@@ -172,13 +172,8 @@ Z.house = (function () {
     hg.addColorStop(0, U.rgba(s.color, (0.18 + glow * 0.3) * pulse)); hg.addColorStop(1, U.rgba(s.color, 0));
     ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(x, iy, hr, 0, U.TAU); ctx.fill();
     ctx.restore();
-    // crisp cream glyph
-    ctx.save();
-    ctx.strokeStyle = U.rgba('#fff5e4', 0.72 + glow * 0.28);
-    ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    s.glyph(ctx, x, iy);
-    ctx.restore();
-    if (glow > 0.55) Z.render.pxText(ctx, s.prompt, x, iy - 15, 9, U.rgba('#fff1d6', glow), 'center');
+    // no icon — just the soft glow + a word when you're close
+    if (glow > 0.35) Z.render.pxText(ctx, s.prompt, x, iy - 6, 9, U.rgba('#fff1d6', glow), 'center');
   }
 
   // ---- tiny icon glyphs (drawn with the current strokeStyle) ----

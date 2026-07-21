@@ -75,18 +75,14 @@ Z.ramen = (function () {
 
     if (warp > 0) warp -= dt;
 
-    if (seated) {
-      // hop onto the stool then cut to the cozy feast
-      seatT += dt;
-      const hop = Math.min(1, seatT * 4);
-      const sy = groundY - stoolH * U.ease.outBack(hop);
-      Z.render.drawSprite('char.tanuki', seatX, sy, { w: tanW * 0.96, bob: Math.sin(t * 2.2) * 2.4, squash: Math.sin(t * 2.2) * 0.02, facing: 1, anim: seatT > 0.6 ? 'happy' : 'jump', animT: t });
-      if (seatT > 0.72 && !menuLaunched) { menuLaunched = true; toFeast(); }
-    } else if (kid.x < minX) {
+    const doorX = W * 0.5;                                  // the shop front — ENTER to go inside
+    let nearDoor = false;
+    if (kid.x < minX) {
       // auto walk in from the left edge
       kid.vx = SPEED; kid.x += SPEED * dt; kid.walk += dt; kid.facing = 1;
     } else {
-      // free roam: A/D. left edge -> crossroad, right edge (past Ao) -> cave.
+      // free roam: A/D. left edge -> crossroad, right edge (past Ao) -> cave,
+      // ENTER at the shop front -> step inside for a bowl.
       const dir = Z.controls ? Z.controls.dir : 0;
       if (dir && dir !== kid.facing) { kid.facing = dir; kid.turn = 1; }
       if (kid.turn > 0) kid.turn = Math.max(0, kid.turn - dt * 5);
@@ -99,27 +95,22 @@ Z.ramen = (function () {
         if (kid.x <= minX + 2 && dir < 0) { leaveTo('world'); return; }
         if (kid.x >= maxX - 2 && dir > 0) { leaveTo('cave'); return; }
       }
-      // stool proximity -> ENTER sits down to eat
-      nearStool = Math.abs(kid.x - seatX) < W * 0.06;
-      if (nearStool && Z.controls && Z.controls.consumeInteract()) {
-        seated = true; kid.x = seatX; Z.audio.sfx.flip(); Z.fx.dust(seatX, groundY - stoolH, 4, '#cbb489');
-      }
+      nearDoor = Math.abs(kid.x - doorX) < W * 0.08;
+      if (nearDoor && Z.controls && Z.controls.consumeInteract()) { enterShop(); return; }
     }
 
-    if (!seated) {
-      const moving = Math.abs(kid.vx) > 6;
-      const hop = moving ? Math.abs(Math.sin(kid.walk * 10)) * (H * 0.016) : Math.sin(t * 2.2) * (H * 0.004);
-      Z.render.drawSprite('char.tanuki', kid.x, groundY, {
-        w: tanW, bob: hop, squash: moving ? Math.cos(kid.walk * 20) * 0.03 : Math.sin(t * 2.2) * 0.02,
-        facing: kid.facing, turn: kid.turn, sway: moving ? Math.sin(kid.walk * 10) * 0.04 : 0,
-        anim: moving ? 'walk' : 'idle', animT: moving ? kid.walk : t,
-      });
-      if (moving && Math.random() < 0.2) Z.fx.dust(kid.x - kid.facing * tanW * 0.16, groundY, 1, '#cbb489');
-      if (kid.x >= minX) {
-        stoolHint(ctx, seatX, groundY, stoolH, nearStool, t);
-        edgeHint(ctx, W, H, t, -1, 'CROSSROAD', kid.x <= W * 0.22);
-        edgeHint(ctx, W, H, t, 1, 'CAVE', kid.x >= W * 0.78);
-      }
+    const moving = Math.abs(kid.vx) > 6;
+    const hop = moving ? Math.abs(Math.sin(kid.walk * 10)) * (H * 0.016) : Math.sin(t * 2.2) * (H * 0.004);
+    Z.render.drawSprite('char.tanuki', kid.x, groundY, {
+      w: tanW, bob: hop, squash: moving ? Math.cos(kid.walk * 20) * 0.03 : Math.sin(t * 2.2) * 0.02,
+      facing: kid.facing, turn: kid.turn, sway: moving ? Math.sin(kid.walk * 10) * 0.04 : 0,
+      anim: moving ? 'walk' : 'idle', animT: moving ? kid.walk : t,
+    });
+    if (moving && Math.random() < 0.2) Z.fx.dust(kid.x - kid.facing * tanW * 0.16, groundY, 1, '#cbb489');
+    if (kid.x >= minX) {
+      doorMarker(ctx, doorX, groundY, H, nearDoor, t);
+      edgeHint(ctx, W, H, t, -1, 'CROSSROAD', kid.x <= W * 0.22);
+      edgeHint(ctx, W, H, t, 1, 'CAVE', kid.x >= W * 0.78);
     }
 
     timeTint(ctx, W, H);
@@ -127,22 +118,19 @@ Z.ramen = (function () {
     Z.render.drawPetals(t);
   }
 
-  // a soft glowing bowl icon over the stool — brighter when you're near
-  function stoolHint(ctx, x, gy, stoolH, near, t) {
-    const glow = near ? 1 : 0.28;
-    const iy = gy - stoolH - 30 - Math.sin(t * 2.4) * 3 - glow * 5;
+  function enterShop() { Z.audio.sfx.flip(); toFeast(); }
+
+  // soft glow + ENTER over the shop front — no icon
+  function doorMarker(ctx, x, gy, H, near, t) {
+    const glow = near ? 1 : 0.3;
+    const iy = gy - H * 0.34 - Math.sin(t * 2.4) * 3 - glow * 5;
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    const hr = 12 + glow * 9;
+    const hr = 13 + glow * 10;
     const hg = ctx.createRadialGradient(x, iy, 1, x, iy, hr);
-    hg.addColorStop(0, U.rgba('#ffd98a', 0.18 + glow * 0.3)); hg.addColorStop(1, U.rgba('#ffd98a', 0));
+    hg.addColorStop(0, U.rgba('#ffd98a', 0.16 + glow * 0.3)); hg.addColorStop(1, U.rgba('#ffd98a', 0));
     ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(x, iy, hr, 0, U.TAU); ctx.fill();
     ctx.restore();
-    ctx.save();
-    ctx.strokeStyle = U.rgba('#fff1d6', 0.7 + glow * 0.3); ctx.lineWidth = 2; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.arc(x, iy, 6, 0.12 * Math.PI, 0.88 * Math.PI); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x - 8, iy - 1); ctx.lineTo(x + 8, iy - 1); ctx.stroke();
-    ctx.restore();
-    if (near) Z.render.pxText(ctx, 'EAT', x, iy - 14, 9, U.rgba('#fff1d6', 0.9), 'center');
+    if (near) Z.render.pxText(ctx, 'ENTER', x, iy - 6, 9, U.rgba('#fff1d6', 0.9), 'center');
   }
 
   // faint glowing chevron hugging one screen edge (same idiom as the crossroad)

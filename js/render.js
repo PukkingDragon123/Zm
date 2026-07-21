@@ -131,7 +131,7 @@ Z.render = (function () {
   // frame names -> [col,row]. Frames are auto-trimmed to their content box
   // and scaled by ONE per-sheet factor, so poses never float or resize.
   const SHEETS = {
-    'char.tanuki': { key: 'sheet.tanuki', cols: 4, rows: 2, anims: { walk: [[0, 0], [1, 0], [2, 0], [3, 0]], idle: [[1, 1], [3, 1]], jump: [[0, 1]], happy: [[2, 1]], talk: [[2, 1], [1, 1]] } },
+    'char.tanuki': { key: 'sheet.tanuki', cols: 4, rows: 1, anims: { walk: [[0, 0], [1, 0], [2, 0], [3, 0]], idle: [[0, 0]], jump: [[2, 0]], happy: [[1, 0]], talk: [[1, 0], [3, 0]] } },
     'char.kappa': { key: 'sheet.kappa', cols: 4, rows: 2, anims: { walk: [[0, 1], [1, 1]], idle: [[0, 0], [1, 0]], jump: [[3, 1]], happy: [[3, 1]], talk: [[2, 0], [3, 0], [2, 1]] } },
     'glide.tanuki': { key: 'sheet.glide', cols: 3, rows: 1, anims: { glide: [[0, 0], [1, 0], [2, 0]] } },
   };
@@ -140,7 +140,7 @@ Z.render = (function () {
   // on a tainted canvas (opening the game from file://), which used to silently
   // drop the animation. Values were measured once from the art.
   const SHEET_BB = {
-    'sheet.tanuki': { fw: 384, fh: 512, refW: 285, refH: 436, bb: { '0,0': { x: 77, y: 76, w: 285, h: 436 }, '1,0': { x: 433, y: 76, w: 279, h: 392 }, '2,0': { x: 779, y: 76, w: 373, h: 393 }, '3,0': { x: 1152, y: 82, w: 248, h: 386 }, '0,1': { x: 77, y: 512, w: 286, h: 346 }, '1,1': { x: 443, y: 537, w: 279, h: 386 }, '2,1': { x: 789, y: 547, w: 363, h: 376 }, '3,1': { x: 1152, y: 571, w: 235, h: 352 } } },
+    'sheet.tanuki': { fw: 500, fh: 563, refW: 486, refH: 512, bb: { '0,0': { x: 100, y: 26, w: 371, h: 511 }, '1,0': { x: 564, y: 26, w: 364, h: 511 }, '2,0': { x: 1014, y: 26, w: 486, h: 512 }, '3,0': { x: 1500, y: 35, w: 323, h: 502 } } },
     'sheet.kappa': { fw: 384, fh: 512, refW: 278, refH: 426, bb: { '0,0': { x: 106, y: 76, w: 251, h: 419 }, '1,0': { x: 465, y: 78, w: 243, h: 419 }, '2,0': { x: 787, y: 73, w: 278, h: 426 }, '3,0': { x: 1168, y: 75, w: 274, h: 419 }, '0,1': { x: 87, y: 542, w: 278, h: 403 }, '1,1': { x: 433, y: 543, w: 308, h: 395 }, '2,1': { x: 826, y: 539, w: 326, h: 403 }, '3,1': { x: 1152, y: 542, w: 300, h: 403 } } },
     'sheet.glide': { fw: 629, fh: 512, refW: 436, refH: 500, bb: { '0,0': { x: 97, y: 6, w: 436, h: 500 }, '1,0': { x: 635, y: 29, w: 617, h: 455 }, '2,0': { x: 1335, y: 49, w: 475, h: 415 } } },
   };
