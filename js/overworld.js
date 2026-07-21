@@ -15,7 +15,49 @@ Z.overworld = (function () {
   let kid = { fx: 0.5, vx: 0, facing: 1, walk: 0, turn: 0 };
   let started = false, warp = 0;
 
-  function enter() { started = true; kid.fx = 0.5; kid.vx = 0; warp = 0.35; }   // spawn safely mid-street
+  // ---- living-town ambient layer (all canvas / existing sprites, no new art) ----
+  let npcs = [], flies = [], birds = [], birdT = 3;
+  const NPC_KEYS = ['char.kappa', 'char.tengu', 'char.oni', 'char.ao'];
+  const qW = (w) => Math.round(w / 8) * 8;               // stable sprite-cache buckets
+  const night = () => !!(Z.state && Z.state.isNight);
+
+  function enter() { started = true; kid.fx = 0.5; kid.vx = 0; warp = 0.35; initAmbient(); }   // spawn safely mid-street
+
+  function initAmbient() {
+    npcs = []; flies = []; birds = []; birdT = U.rand(2, 6);
+    npcs.push(spawnNpc(true)); npcs.push(spawnNpc(true));
+  }
+  function spawnNpc(anyX) {
+    const key = U.choice(NPC_KEYS), dir = U.chance(0.5) ? 1 : -1, lane = U.rand(0, 1);
+    return {
+      key, facing: dir, dir, lane,
+      fx: anyX ? U.rand(0.12, 0.88) : (dir > 0 ? -0.06 : 1.06),
+      vx: dir * U.rand(0.045, 0.085),                    // fx units/sec (slow stroll)
+      walk: U.rand(0, 3), bob: U.rand(0, U.TAU), canWalk: key === 'char.kappa',
+    };
+  }
+  function updateAmbient(dt) {
+    const W = Z.render.W, H = Z.render.H;
+    for (let i = npcs.length - 1; i >= 0; i--) {
+      const n = npcs[i]; n.fx += n.vx * dt; n.walk += dt;
+      if ((n.dir > 0 && n.fx > 1.1) || (n.dir < 0 && n.fx < -0.1)) npcs.splice(i, 1);
+    }
+    while (npcs.length < 2) npcs.push(spawnNpc(false));
+    if (night()) {
+      while (flies.length < 14) flies.push(newFly(W, H));
+      for (const f of flies) {
+        f.ph += dt; f.x += (Math.sin(f.ph * 0.7) * 8 + f.drift) * dt; f.y += Math.cos(f.ph * 0.9) * 6 * dt;
+        if (f.x < -20) f.x = W + 20; if (f.x > W + 20) f.x = -20;
+      }
+    } else if (flies.length) flies.length = 0;
+    if (!night()) { birdT -= dt; if (birdT <= 0 && !birds.length) { spawnFlock(W, H); birdT = U.rand(12, 26); } }
+    for (let i = birds.length - 1; i >= 0; i--) { const b = birds[i]; b.x += b.vx * dt; b.wing += dt * 10; if (b.x > W + 60 || b.x < -60) birds.splice(i, 1); }
+  }
+  function newFly(W, H) { return { x: U.rand(0, W), y: U.rand(H * 0.45, H * 0.86), ph: U.rand(0, U.TAU), drift: U.rand(-10, 10), r: U.rand(1.3, 2.4) }; }
+  function spawnFlock(W, H) {
+    const dir = U.chance(0.5) ? 1 : -1, n = U.randInt(3, 6), y0 = H * U.rand(0.12, 0.26), x0 = dir > 0 ? -40 : W + 40, sp = dir * U.rand(60, 110);
+    for (let i = 0; i < n; i++) birds.push({ x: x0 - dir * i * 22, y: y0 + (i % 2 ? 1 : -1) * i * 3 + U.rand(-6, 6), vx: sp, wing: U.rand(0, U.TAU) });
+  }
 
   function frame(dt, t) {
     const W = Z.render.W, H = Z.render.H, ctx = Z.render.ctx;
@@ -41,14 +83,17 @@ Z.overworld = (function () {
         if (kid.fx >= 0.96 && dir > 0) return go(RIGHT);
       }
     }
+    updateAmbient(dt);                                    // town keeps living even during cutscenes
 
-    // ---- draw: clean cherry-tree street ----
-    if (!Z.assets.cover(ctx, 'world.sakura', 0, 0, W, H, 0.5) &&
-        !Z.assets.cover(ctx, 'world.konbini', 0, 0, W, H, 0.5) &&
-        !Z.assets.cover(ctx, 'world.street', 0, 0, W, H, 0.5)) {
+    // ---- draw: clean cherry-tree street (tiny parallax as you walk) ----
+    const par = (kid.fx - 0.5) * 0.05;
+    if (!Z.assets.cover(ctx, 'world.sakura', 0, 0, W, H, 0.5 + par) &&
+        !Z.assets.cover(ctx, 'world.konbini', 0, 0, W, H, 0.5 + par) &&
+        !Z.assets.cover(ctx, 'world.street', 0, 0, W, H, 0.5 + par)) {
       const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#8fc7e8'); g.addColorStop(1, '#d7c7a6');
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     }
+    drawBirds(ctx);                                      // distant flocks in the sky band (day only)
     // soft ground-contact only (keep the photo bright)
     const gg = ctx.createLinearGradient(0, groundY - H * 0.12, 0, H);
     gg.addColorStop(0, 'rgba(30,22,12,0)'); gg.addColorStop(1, 'rgba(30,22,12,.22)');
@@ -57,6 +102,10 @@ Z.overworld = (function () {
     // faint edge chevrons + a whisper of a name (no signboards)
     edgeHint(ctx, W, H, t, -1, LEFT.name, kid.fx <= 0.22);
     edgeHint(ctx, W, H, t, 1, RIGHT.name, kid.fx >= 0.78);
+
+    // a loafing cat + a couple of strolling townsfolk, behind the player
+    drawCat(ctx, W, H, groundY, t);
+    drawNpcs(ctx, W, H, groundY, t);
 
     // ---- the tanuki, small + cute ----
     const kx = kid.fx * W;
@@ -74,8 +123,79 @@ Z.overworld = (function () {
     // gentle day/night wash over the whole street + tanuki
     timeTint(ctx, W, H);
 
+    // warm lantern glow at the HOME/RAMEN edges + night fireflies (over the wash)
+    drawLanterns(ctx, W, H, t);
+    drawFireflies(ctx, t);
+
     if (Z.clock && Z.clock.draw) Z.clock.draw(ctx, 40, 46);
     Z.render.drawPetals(t);
+  }
+
+  function drawBirds(ctx) {
+    if (!birds.length) return; const H = Z.render.H;
+    ctx.save(); ctx.strokeStyle = 'rgba(40,34,26,.5)'; ctx.lineWidth = Math.max(1, H / 620); ctx.lineCap = 'round';
+    for (const b of birds) {
+      const f = Math.sin(b.wing) * 3 + 4;
+      ctx.beginPath(); ctx.moveTo(b.x - 6, b.y);
+      ctx.quadraticCurveTo(b.x - 2, b.y - f, b.x, b.y);
+      ctx.quadraticCurveTo(b.x + 2, b.y - f, b.x + 6, b.y); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  function drawNpcs(ctx, W, H, groundY, t) {
+    const list = npcs.slice().sort((a, b) => b.lane - a.lane);   // far lanes first
+    for (const n of list) {
+      const gy = groundY - n.lane * H * 0.05;                    // farther = higher up
+      const w = qW(U.clamp(H * 0.13, 74, 120) * (1 - n.lane * 0.32));
+      const kx = n.fx * W;
+      const hop = n.canWalk ? Math.abs(Math.sin(n.walk * 9)) * (H * 0.010)
+        : Math.abs(Math.sin(n.walk * 4 + n.bob)) * (H * 0.008);
+      ctx.save(); ctx.globalAlpha = 1 - n.lane * 0.28;           // atmospheric recede
+      Z.render.drawSprite(n.key, kx, gy, {
+        w, bob: hop, squash: Math.cos(n.walk * 18) * 0.02, facing: n.facing,
+        sway: Math.sin(n.walk * 8) * 0.03,
+        anim: n.canWalk ? 'walk' : undefined, animT: n.walk,
+      });
+      ctx.restore();
+    }
+  }
+  function drawCat(ctx, W, H, groundY, t) {
+    const s = Math.max(1, H / 620), x = W * 0.14, y = groundY - 2, body = '#3a3230';
+    ctx.save(); ctx.translate(x, y);
+    ctx.fillStyle = 'rgba(20,14,8,.28)'; ctx.beginPath(); ctx.ellipse(0, 2, 16 * s, 4 * s, 0, 0, U.TAU); ctx.fill();
+    ctx.fillStyle = body;
+    ctx.beginPath(); ctx.ellipse(0, -7 * s, 15 * s, 8 * s, 0, 0, U.TAU); ctx.fill();     // loaf
+    ctx.beginPath(); ctx.arc(-12 * s, -14 * s, 6.5 * s, 0, U.TAU); ctx.fill();           // head
+    ctx.beginPath(); ctx.moveTo(-16 * s, -19 * s); ctx.lineTo(-14 * s, -24 * s); ctx.lineTo(-11 * s, -20 * s); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-11 * s, -20 * s); ctx.lineTo(-8 * s, -24 * s); ctx.lineTo(-7 * s, -19 * s); ctx.fill();
+    ctx.strokeStyle = body; ctx.lineWidth = 4 * s; ctx.lineCap = 'round';                // tail flick
+    ctx.beginPath(); ctx.moveTo(14 * s, -6 * s); ctx.quadraticCurveTo(24 * s, -10 * s, 22 * s + Math.sin(t * 1.6) * 6 * s, -18 * s); ctx.stroke();
+    ctx.fillStyle = night() ? '#ffe08a' : '#c9d24a';
+    ctx.beginPath(); ctx.arc(-14 * s, -14 * s, 1.2 * s, 0, U.TAU); ctx.arc(-10.5 * s, -14 * s, 1.2 * s, 0, U.TAU); ctx.fill();
+    ctx.restore();
+  }
+  function drawLanterns(ctx, W, H, t) {
+    const warm = night() ? 0.55 : 0.14; if (warm < 0.02) return;
+    const spots = [{ x: W * 0.90, y: H * 0.34, r: H * 0.10, col: '#ffb85c' }, { x: W * 0.10, y: H * 0.36, r: H * 0.08, col: '#ffcf7a' }];
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (const sp of spots) {
+      const flick = 0.85 + 0.15 * Math.sin(t * 3 + sp.x);
+      const g = ctx.createRadialGradient(sp.x, sp.y, 2, sp.x, sp.y, sp.r);
+      g.addColorStop(0, U.rgba(sp.col, warm * flick)); g.addColorStop(1, U.rgba(sp.col, 0));
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sp.x, sp.y, sp.r, 0, U.TAU); ctx.fill();
+    }
+    ctx.restore();
+  }
+  function drawFireflies(ctx, t) {
+    if (!flies.length) return;
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (const f of flies) {
+      const pulse = 0.4 + 0.6 * Math.abs(Math.sin(f.ph * 2)), R = f.r * 4;
+      const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, R);
+      g.addColorStop(0, U.rgba('#eaff9a', 0.9 * pulse)); g.addColorStop(1, 'rgba(180,220,120,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(f.x, f.y, R, 0, U.TAU); ctx.fill();
+    }
+    ctx.restore();
   }
 
   function go(dest) {
