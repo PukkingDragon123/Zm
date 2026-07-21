@@ -20,6 +20,8 @@ Z.state = (function () {
     campsDone: {},        // campId -> true
     missionsDone: {},     // missionId -> true
     restored: {},         // districtId -> true
+    storySeen: {},        // storyBeatId -> true (campaign progress)
+    won: false,           // true once the town is freed (ending beat)
     stats: {
       wins: 0, losses: 0, ringOuts: 0, koFinishes: 0, noDamageWins: 0,
       rareFinds: 0, currentStreak: 0, bestStreak: 0, earnedTotal: 0,
@@ -36,6 +38,7 @@ Z.state = (function () {
     s.botName = st.botName;
     s.beaten = {}; s.claimedQuests = {}; s.tutorialSeen = false; s.scavengeCost = 40; s.buff = null;
     s.friend = {}; s.missionsDone = {}; s.restored = {}; s.campsDone = {};
+    s.storySeen = {}; s.won = false;
     s.stats = { wins: 0, losses: 0, ringOuts: 0, koFinishes: 0, noDamageWins: 0, rareFinds: 0, currentStreak: 0, bestStreak: 0, earnedTotal: 0, winsByWeapon: {}, matches: 0 };
   }
 
@@ -59,6 +62,10 @@ Z.state = (function () {
       s.missionsDone = saved.missionsDone || {};
       s.restored = saved.restored || {};
       s.campsDone = saved.campsDone || {};
+      s.storySeen = saved.storySeen || {};
+      s.won = !!saved.won;
+      // old saves: fold the retired tutorial flag into the intro beat so it never replays
+      if (saved.tutorialSeen && s.storySeen.b0_intro === undefined) s.storySeen.b0_intro = true;
       if (saved.stats) Object.assign(s.stats, saved.stats);
       migrateBuild();
     } else {
@@ -188,6 +195,8 @@ Z.state = (function () {
     // ---- day/night clock ----
     get clock() { return s.clock; }, set clock(h) { s.clock = ((h % 24) + 24) % 24; },
     get dayCount() { return s.dayCount; },
+    get won() { return s.won; },
+    get storySeen() { return s.storySeen; },
     get isNight() { return s.clock < 6 || s.clock >= 19; },
     advanceClock(h) { s.clock += h; while (s.clock >= 24) { s.clock -= 24; s.dayCount++; } persist(); },
     setClock(h) { s.clock = ((h % 24) + 24) % 24; persist(); },

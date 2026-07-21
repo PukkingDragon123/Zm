@@ -81,7 +81,17 @@ Z.house = (function () {
       fade += dt * 1.8;
       if (fade >= 1) {
         fade = 1;
-        if (!fadeApplied) { fadeApplied = true; Z.state.setClock(21); Z.audio.sfx.boost(); Z.ui.toast('Night falls.', 'gold'); }
+        if (!fadeApplied) {
+          fadeApplied = true; Z.audio.sfx.boost();
+          if (Z.state.isNight) {
+            // sleeping through the night -> next morning (08:00), advancing the day
+            const h = Z.state.clock < 8 ? (8 - Z.state.clock) : (24 - Z.state.clock + 8);
+            Z.state.advanceClock(h); Z.ui.toast('A new day in Spirit Town.', 'gold');
+            if (Z.story) Z.story.check('newday');
+          } else {
+            Z.state.setClock(21); Z.ui.toast('Night falls.', 'gold');
+          }
+        }
         fadeDir = -1;
       }
     } else if (fadeDir === -1) {

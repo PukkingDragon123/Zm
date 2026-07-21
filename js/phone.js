@@ -152,10 +152,13 @@ Z.phone = (function () {
     quest.addEventListener('click', () => { Z.audio && Z.audio.sfx.click(); view = 'quests'; render(); });
     apps.appendChild(quest);
 
-    const raid = U.el('div', 'ph-app' + (night ? '' : ' off'));
+    const raidKnown = !Z.story || Z.story.seen('b1_night');   // Ao introduces the camps first
+    const raid = U.el('div', 'ph-app' + ((night && raidKnown) ? '' : ' off'));
+    const raidNote = !raidKnown ? 'Ao has not shown you the camps yet' : (night ? 'three targets tonight' : 'come back at night');
     raid.innerHTML = `<div class="ph-ic">${IC_RAID}</div><div class="ph-name">RAID MAP</div>` +
-      `<div class="ph-note">${night ? 'three targets tonight' : 'come back at night'}</div>`;
+      `<div class="ph-note">${raidNote}</div>`;
     raid.addEventListener('click', () => {
+      if (!raidKnown) { Z.audio && Z.audio.sfx.error(); Z.ui.toast('You do not know where their camps are yet.', 'warn'); return; }
       if (!(Z.state && Z.state.isNight)) { Z.audio && Z.audio.sfx.error(); Z.ui.toast('The raid map only wakes at night.', 'warn'); return; }
       Z.audio && Z.audio.sfx.click(); close(); Z.ui.show('raidmap');
     });

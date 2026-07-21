@@ -58,21 +58,11 @@ Z.game = (function () {
     Z.ui.init();
     Z.workbench.init(); Z.scavenge.init(); Z.shop.init(); Z.ramen.init(); Z.crew.init(); Z.quests.init(); Z.ladder.init(); Z.infil.init(); Z.overworld.init();
     if (Z.house) Z.house.init(); if (Z.cave) Z.cave.init(); if (Z.menu) Z.menu.init();
-    if (Z.clock) Z.clock.init(); if (Z.phone) Z.phone.init();
+    if (Z.clock) Z.clock.init(); if (Z.phone) Z.phone.init(); if (Z.story) Z.story.init();
 
     Z.ui.registerAction('play', () => {
       Z.audio.resume(); Z.ui.show('world');
-      if (!Z.state.tutorialSeen) {
-        Z.state.tutorialSeen = true; Z.state.persist();
-        Z.cutscene.play([
-          { who: 'Ao', img: 'ao', text: 'New face. Round one, too. You picked a strange season to wander into Spirit Town, tanuki.' },
-          { who: 'Ao', img: 'ao', text: 'KANE-CO machines squat in half our districts now. They measure everything and love nothing.' },
-          { who: '???', img: 'tanuki', side: 'right', text: '...' },
-          { who: 'Ao', img: 'ao', text: 'Not a talker. Good. The dohyo speaks louder anyway.' },
-          { who: 'Ao', img: 'ao', text: 'Your den is up the street. Build a puppet from wood and rune stones, then check the request board. The town could use paws like yours.' },
-          { who: 'Ao', img: 'ao', text: 'Come by the shop after. First bowl is not free, but it is close.' },
-        ]);
-      }
+      if (Z.story) Z.story.check('start');       // intro beat b0 (owned by story.js)
     });
     Z.ui.registerAction('worldFromInfil', () => { Z.infil.leave(); Z.ui.show('world'); });
     Z.ui.registerAction('reset', () => { if (confirm('Start a brand new journey? Your current save will be swept away.')) { Z.state.reset(); Z.ui.toast('Save wiped.', 'warn'); } });

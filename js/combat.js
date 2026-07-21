@@ -511,6 +511,8 @@ Z.combat = (function () {
     if (rankUps && rankUps.length) html += `<div class="rrow"><span>PROMOTED</span><b>${rankUps.map((r) => r.name).join(' > ')}</b></div>`;
     document.getElementById('resultBody').innerHTML = html;
     Z.ui.show('result');
+    // story heartbeat: play the next eligible beat AFTER any post-battle scene
+    const beat = () => { if (Z.story) Z.story.check('battle'); };
     // post-battle scenes
     if (win && isM) {
       const scene = [
@@ -518,13 +520,15 @@ Z.combat = (function () {
         partner ? { who: partner.name, img: partner.id, text: partner.winLine || U.choice(partner.banter) } : null,
       ];
       if (restoredName) scene.push({ who: 'SPIRIT TOWN', text: restoredName + ' breathes again. Lanterns are going up on main street.' });
-      Z.cutscene.play(scene);
+      Z.cutscene.play(scene, beat);
     } else if (win && en.isChampion) {
       Z.cutscene.play([
         { who: en.name, evil: true, side: 'right', text: en.defeatLine },
         { who: 'Ao', img: 'ao', text: 'Grand champion. The broom approves. The whole town approves.' },
         { who: 'Ao', img: 'ao', text: 'Come by the shop. Tonight the Spirit Feast Bowl is free. Do not tell anyone.' },
-      ]);
+      ], beat);
+    } else {
+      beat();                              // regular duel / defeat: still tick the story
     }
   }
 
