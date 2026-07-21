@@ -295,6 +295,7 @@ Z.render = (function () {
     const accent = v.accent, t = anim.t || 0;
     const moving = !!anim.moving, flying = !!anim.fly, atk = anim.attackT || 0;
     const walk = anim.wheel || 0;
+    const tell = opts.tell || 0, charged = !!opts.charged;   // enemy wind-up / skill-ready aura (additive)
     const INK = 'rgba(18,15,12,.9)';
 
     // ---- beveled metal plate helpers (light from upper-left => 3D read) ----
@@ -329,7 +330,7 @@ Z.render = (function () {
     const lean = (atk > 0 ? 0.18 * (1 - atk) : 0) + (moving ? 0.05 : 0) + (flying ? 0.1 : 0);
     const hipY = baseY - legH - hop;
     const chestY = hipY - torsoH;
-    const thrust = flying ? 1 : (atk > 0 ? 0.5 : 0.12 + 0.06 * Math.sin(t * 9));   // booster intensity
+    const thrust = flying ? 1 : (atk > 0 ? U.clamp(0.55 + atk * 0.4, 0, 1) : 0.12 + 0.06 * Math.sin(t * 9));   // booster flares on the swing follow-through
 
     // ground shadow (shrinks + fades with altitude; never a negative radius)
     ctx.save(); ctx.globalAlpha = Math.max(0, 0.3 * (1 - lift / (40 * s))); ctx.fillStyle = '#12100c';
@@ -363,6 +364,9 @@ Z.render = (function () {
     // back limbs
     drawArm(-step, -1, false, true);
     drawLeg(-step, true);
+
+    // charge aura — soft accent halo behind the core when a skill/EX is ready
+    if (charged) glow(0, chestY + torsoH * 0.4, torsoW * 0.95, accent, 0.14 + 0.09 * Math.sin(t * 6));
 
     // ================= TORSO =================
     // waist / hip block
@@ -403,6 +407,15 @@ Z.render = (function () {
     glow(0, vy, 7 * s, P.optic, 0.55);
     poly([[-headW * 0.42, vy - 2.4 * s], [headW * 0.42, vy - 2.4 * s], [headW * 0.36, vy + 2.4 * s], [-headW * 0.36, vy + 2.4 * s]], P.optic, { lw: 1.2 });
     ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fillRect(headW * 0.1, vy - 1.6 * s, headW * 0.16, 1.6 * s);
+    // TELL: telegraphing mech flashes its visor red + a warning glow
+    if (tell > 0) {
+      const pr = 0.5 + 0.4 * Math.sin(t * 30);
+      glow(0, vy, 11 * s, '#ff4436', (0.4 + 0.5 * pr) * tell);
+      glow(0, chestY, torsoW * 1.05, '#ff4436', 0.14 * tell);
+      ctx.save(); ctx.globalAlpha = tell;
+      poly([[-headW * 0.42, vy - 2.4 * s], [headW * 0.42, vy - 2.4 * s], [headW * 0.36, vy + 2.4 * s], [-headW * 0.36, vy + 2.4 * s]], '#ff4436', { lw: 1.2 });
+      ctx.restore();
+    }
     // V-fin crest
     ctx.save(); ctx.translate(0, hy);
     poly([[-1.5 * s, 0], [-9 * s, -8 * s], [-6 * s, -8.5 * s], [-1 * s, -2 * s]], accent, { lw: 1.2 });
@@ -449,7 +462,7 @@ Z.render = (function () {
       const col = back ? P.shad : P.base, colD = back ? P.dark : P.shad;
       const baseAng = withWeapon ? -0.35 : 0.4;
       let aAng = baseAng + ph * 0.45 * side;
-      if (withWeapon && atk > 0) aAng = -1.7 + (1 - atk) * 2.6;      // wind-up -> swing
+      if (withWeapon && atk > 0) aAng = -1.9 + (1 - atk) * 3.0;      // deeper wind-up -> bigger follow-through arc
       if (flying && withWeapon) aAng = -0.15;
       const shX = side * torsoW * 0.34, shY = chestY + torsoH * 0.18;
       const elX = shX + Math.cos(aAng) * 12 * s * side, elY = shY + Math.sin(aAng) * 12 * s + 5 * s;
@@ -466,6 +479,13 @@ Z.render = (function () {
       // fist
       plateRR(haX - 3.5 * s, haY - 3.5 * s, 7 * s, 7 * s, 2 * s, colD);
       if (withWeapon && v.weapons.length) drawWeapon(v.weapons[0], haX, haY, aAng);
+      // saber / thruster motion streak on the swing peak (additive light)
+      if (withWeapon && atk > 0.6) {
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = U.rgba(accent, (atk - 0.6) / 0.4 * 0.75); ctx.lineWidth = 3.2 * s; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(haX, haY); ctx.lineTo(haX + Math.cos(aAng) * 36 * s, haY + Math.sin(aAng) * 36 * s); ctx.stroke();
+        ctx.restore();
+      }
     }
     function drawWeapon(type, hx, hy2, aAng) {
       ctx.save(); ctx.translate(hx, hy2);

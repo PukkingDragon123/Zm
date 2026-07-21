@@ -62,6 +62,7 @@ Z.combat = (function () {
       atkStep: 0, chainStep: 0, chainT: 0,
       skillCd: 0,
       block: false, blockT0: -9, stun: 0, hitFlash: 0, moveInput: 0, dashT: 0,
+      iframeT: 0, dodgeT: 0, tele: 0, teleKind: null, comboKind: [], exCd: 0,
       jumps: 0, flyT: 0, turn: 0, diving: false,
       anim: { t: 0, spin: 0, wheel: 0, hammer: 0, flip: 0, moving: false, attackT: 0, fly: false },
       aggr: spec.aggression != null ? spec.aggression : 0.6, arche: spec.archetype || 'allrounder', think: 0,
@@ -138,9 +139,10 @@ Z.combat = (function () {
       if (mi && Math.sign(mi) !== Math.sign(P.moveInput || mi)) P.turn = 1;
       P.moveInput = mi;
       if (Z.controls.consumeJump()) tryJump(P);
+      if (Z.controls.consumeDodge()) tryDodge(P);
       if (Z.controls.consumeAttack()) tryAttack(P, E);
       if (Z.controls.held.attack && P.atkCd <= 0) tryAttack(P, E);
-      if (Z.controls.consumeSkill()) trySkill(P, E);
+      if (Z.controls.consumeSkill()) { if (Z.controls.held.block) tryBurst(P, E); else trySkill(P, E); }
       ai(E, P, dt);
       integrate(P, dt); integrate(E, dt);
       resolveOverlap();
@@ -183,11 +185,27 @@ Z.combat = (function () {
     }
   }
 
+  // DODGE — a snappy grounded dash granting a short i-frame window. Cannot be
+  // spammed (own dash/iframe timers gate it) and costs a little reactor charge.
+  function tryDodge(f) {
+    if (f.stun > 0 || f.dodgeT > 0 || f.iframeT > 0 || f.energy < 8) { if (f.isPlayer) Z.audio.sfx.error(); return; }
+    const d = f.moveInput !== 0 ? Math.sign(f.moveInput) : -f.facing;   // neutral input = backstep
+    f.vx = d * 620; f.dodgeT = 0.28; f.iframeT = 0.26; f.energy -= 8;
+    f.atkActive = 0; f.chainT = 0; f.chainStep = 0;                     // dodging drops your swing/string
+    f.dashT = Math.max(f.dashT, 0.22);                                  // reuse the afterimage blur
+    Z.fx.speedLines(0.14, f.accent); Z.fx.dust(f.x, stage.groundY, 5, '#cbb489');
+    Z.fx.sparks(f.x - d * f.halfW, stage.groundY - f.y, d > 0 ? Math.PI : 0, 6, f.accent, 0.7, 260);
+    Z.audio.sfx.boost();
+    if (f.isPlayer) opLeftPress = 1; else opRightPress = 1;
+  }
+
   function integrate(f, dt) {
     if (!f) return;
     if (f.stun > 0) f.stun -= dt;
+    if (f.iframeT > 0) f.iframeT -= dt;
     const canMove = f.stun <= 0 && !f.block;
-    if (canMove) f.vx += (f.moveInput * f.moveSpeed - f.vx) * Math.min(1, dt * 9);
+    if (f.dodgeT > 0) { f.dodgeT -= dt; f.vx *= 1 / (1 + 2 * dt); }      // glide: ignore moveInput pull so the dash reads
+    else if (canMove) f.vx += (f.moveInput * f.moveSpeed - f.vx) * Math.min(1, dt * 9);
     f.vx *= 1 / (1 + 6 * dt);
     f.x += f.vx * dt;
     f.anim.moving = canMove && Math.abs(f.moveInput) > 0.1 && f.y <= 0;
@@ -226,11 +244,34 @@ Z.combat = (function () {
     }
     if (f.landSquash > 0) f.landSquash -= dt * 2;
     f.anim.fly = (f.y > 5) || (f.flyT > 0.03);      // light the thrusters + lift when airborne/boosting
-    if (f.x < stage.left) { f.x = stage.left; if (f.vx < -160) { f.stun = Math.max(f.stun, 0.3); Z.fx.dust(f.x, stage.groundY, 4, '#cbb489'); Z.fx.addShake(2); } f.vx = 0; }
-    if (f.x > stage.right) { f.x = stage.right; if (f.vx > 160) { f.stun = Math.max(f.stun, 0.3); Z.fx.dust(f.x, stage.groundY, 4, '#cbb489'); Z.fx.addShake(2); } f.vx = 0; }
+    if (f.x < stage.left) { f.x = stage.left; wallHit(f, -1); }
+    if (f.x > stage.right) { f.x = stage.right; wallHit(f, 1); }
     f.energy = Math.min(f.energyMax, f.energy + f.regen * dt);
     if (f.hitFlash > 0) f.hitFlash -= dt;
     if (f.hp < f.maxHp * 0.4 && Math.random() < dt * 4) Z.fx.smoke(f.x, stage.groundY - f.spec.radius * 1.4, '#5a4a35', 1);
+  }
+
+  // WALL SLAM — being driven into the arena wall at speed hurts. Keeps the old
+  // low-speed stun; adds bonus damage + shockwave + a pop on a hard impact.
+  // (No ring-out: the wall still stops you, it just bites now.)
+  function wallHit(f, dirSign) {
+    const into = Math.sign(f.vx) === dirSign, speed = Math.abs(f.vx);
+    if (into && phase === 'fight' && speed > 420) {
+      const dmg = 6 * (1 - (f.armor || 0) / 100);
+      maybeFinish(f.isPlayer ? E : P, f, dmg);
+      f.hp -= dmg; if (f.isPlayer) f.damaged = true;
+      f.vx = -dirSign * 260; f.vy = Math.max(f.vy, 180);
+      f.stun = Math.max(f.stun, 0.45); f.hitFlash = 0.12;
+      Z.fx.shockwave(f.x, stage.groundY - f.y - 30, GOLD, 140);
+      Z.fx.addShake(6 * (Z.state.settings.shake ? 1 : 0.001)); Z.fx.doHitstop(0.06);
+      Z.fx.dust(f.x, stage.groundY, 6, '#cbb489');
+      Z.fx.damage(f.x, stage.groundY - f.y - 90, dmg, GOLD, true);
+      if (f === E) Z.fx.bigText('WALL SLAM', { color: GOLD, size: 22, ring: false, y: 0.2, dur: 0.6 });
+      crowdHype = Math.min(1.4, crowdHype + 0.5);
+      return;
+    }
+    if (into && speed > 160) { f.stun = Math.max(f.stun, 0.3); Z.fx.dust(f.x, stage.groundY, 4, '#cbb489'); Z.fx.addShake(2); }
+    f.vx = 0;
   }
 
   function resolveOverlap() {
@@ -243,6 +284,7 @@ Z.combat = (function () {
   function cooldowns(f, dt) {
     if (f.atkCd > 0) f.atkCd -= dt;
     if (f.skillCd > 0) f.skillCd -= dt;
+    if (f.exCd > 0) f.exCd -= dt;
     if (f.atkActive > 0) f.atkActive -= dt;
     if (f.anim.hammer > 0) f.anim.hammer = Math.max(0, f.anim.hammer - dt * 4);
     if (f.anim.flip > 0) f.anim.flip = Math.max(0, f.anim.flip - dt * 3);
@@ -256,13 +298,17 @@ Z.combat = (function () {
       if (f.isPlayer) opLeftPress = 1; else opRightPress = 1;
       return;
     }
-    // M1 melee STRING: chain up to 3 hits with escalating knockback; the
-    // 3rd swing is a launcher. Whiff the timing window and the string resets.
-    f.chainStep = f.chainT > 0 ? Math.min(2, f.chainStep + 1) : 0;
+    // M1 melee STRING: LIGHT, LIGHT, HEAVY. Chains up to 3 hits with escalating
+    // knockback; the 3rd swing is a HEAVY launcher. Whiff the window and it resets.
+    const chaining = f.chainT > 0;
+    f.chainStep = chaining ? Math.min(2, f.chainStep + 1) : 0;
+    const heavy = (f.chainStep === 2) || (f.wtype === 'hammer');       // finisher (or the heavy maul) reads big
+    f.comboKind = chaining ? f.comboKind.concat(heavy ? 'H' : 'L') : [heavy ? 'H' : 'L'];
+    if (f.comboKind.length > 3) f.comboKind = f.comboKind.slice(-3);   // HUD readout: last 3 inputs
     f.chainT = 0.5; f.atkStep = f.chainStep;
     f.atkKind = 'hit'; f.atkActive = f.prof.active + (f.chainStep === 2 ? 0.05 : 0);
     f.atkCd = f.prof.cd * (f.chainStep < 2 ? 0.72 : 1.15);   // flows fast, recovers on the finisher
-    f.atkHit = false; f.atkAnim = 1;
+    f.atkHit = false; f.atkAnim = heavy ? 1.15 : 1;          // deeper wind-up read on the heavy
     f.energy = Math.max(0, f.energy - f.prof.ecost);
     if (f.wtype === 'hammer') f.anim.hammer = 1; if (f.wtype === 'flipper') f.anim.flip = 1;
     if (f.isPlayer) opLeftPress = 1; else opRightPress = 1;
@@ -293,6 +339,32 @@ Z.combat = (function () {
     if (f.wtype === 'hammer') Z.audio.sfx.hammer(); else if (f.wtype === 'flamer') Z.audio.sfx.flame();
     Z.audio.sfx.rank();
   }
+  // EX BURST — the second special, shared across weapons but tinted the mech
+  // accent. Trigger = BLOCK + SKILL at full energy. A 360 knockback nova that
+  // clears crowding and resets combo pressure. Long cooldown, drains the reactor.
+  function tryBurst(f, opp) {
+    if (f.exCd > 0 || f.energy < f.energyMax - 1 || f.stun > 0) { if (f.isPlayer) Z.audio.sfx.error(); return; }
+    f.energy = 0; f.exCd = 8;
+    f.atkActive = 0; f.chainT = 0; f.chainStep = 0;          // burst wipes your own swing/string state
+    const col = f.accent, ty = stage.groundY - f.y - f.spec.radius;
+    Z.fx.shockwave(f.x, ty, col, 240); Z.fx.screenFlash(0.4, col); Z.fx.zoom(0.16, 0.6); Z.fx.doHitstop(0.12);
+    Z.fx.transmute(f.x, ty, 90, col, 0.9); Z.fx.speedLines(0.35, col);
+    Z.fx.sparks(f.x, ty, 0, 20, col, Math.PI, 340);
+    Z.fx.addShake(7 * (Z.state.settings.shake ? 1 : 0.001));
+    if (f.isPlayer) Z.fx.bigText('EX BURST', { color: col, size: 34, ring: true, ringColor: col, y: 0.26, dur: 1.0 });
+    if (opp && Math.abs(opp.x - f.x) < 160 && Math.abs(opp.y - f.y) < 120) {
+      const dir = opp.x >= f.x ? 1 : -1;
+      const dmg = (f.power * 0.4 + 18) * (1 - (opp.armor || 0) / 100);
+      maybeFinish(f, opp, dmg);
+      opp.hp -= dmg; if (opp.isPlayer) opp.damaged = true;
+      opp.vx += dir * 520; opp.vy += 260; opp.stun = Math.max(opp.stun, 0.5); opp.hitFlash = 0.15;
+      opp.tele = 0; opp.teleKind = null;                    // nova cancels any wind-up
+      Z.fx.damage(opp.x, stage.groundY - opp.y - 90, dmg, col, true);
+    }
+    crowdHype = Math.min(1.4, crowdHype + 1.0);
+    if (f.isPlayer) opLeftPress = 1; else opRightPress = 1;
+    Z.audio.sfx.rank();
+  }
 
   function inRange(f, opp, extra) {
     const reach = f.prof.reach + (extra || 0) + f.halfW + opp.halfW;
@@ -308,6 +380,18 @@ Z.combat = (function () {
     const col = f.accent;
     const hittable = multiHit ? true : !f.atkHit;
     if (!hittable || !inRange(f, opp, skill ? sk.reachAdd : 0)) return;
+    // DODGE i-frames: a defender phases clean through a discrete strike — no
+    // damage, no knockback — and gets a small energy reward + a stylish pop.
+    if (opp.iframeT > 0 && !multiHit) {
+      f.atkHit = true; f.tele = 0; f.teleKind = null;
+      opp.energy = Math.min(opp.energyMax, opp.energy + 8);
+      const px = opp.x, py = stage.groundY - opp.y - opp.spec.radius * 1.4;
+      Z.fx.speedLines(0.12, SPIRIT);
+      if (opp.isPlayer) Z.fx.bigText('DODGE', { color: SPIRIT, size: 22, ring: false, y: 0.22, dur: 0.5 });
+      Z.fx.sparks(px, py, -Math.PI / 2, 8, SPIRIT, 1.0, 220);
+      Z.audio.sfx.boost();
+      return;
+    }
     const blocked = opp.block;
     // PERFECT PARRY: guard raised within the last 0.2s deflects a discrete strike
     if (blocked && !multiHit && (t - opp.blockT0) < 0.2) {
@@ -343,6 +427,7 @@ Z.combat = (function () {
     const stunAmt = multiHit ? 0.04 : (skill ? 0.35 : (step === 2 ? 0.3 : (f.wtype === 'hammer' || f.wtype === 'flipper' ? 0.25 : 0.06)));
     if (stunAmt) opp.stun = Math.max(opp.stun, stunAmt);
     opp.hitFlash = 0.12;
+    f.tele = 0; f.teleKind = null;                           // a resolved swing ends the wind-up read
     const hx = (f.x + opp.x) / 2, hy = stage.groundY - opp.y - f.spec.radius - 6;
     if (multiHit) { Z.fx.flame(hx, hy, f.facing > 0 ? 0 : Math.PI, col); if (skill) Z.fx.sparks(hx, hy, f.facing > 0 ? 0 : Math.PI, 4, col, 0.8, 300); }
     else {
@@ -386,6 +471,18 @@ Z.combat = (function () {
     const reach = f.prof.reach + f.halfW + opp.halfW;
     f.block = false;
     if (f.stun > 0) { f.moveInput = 0; return; }
+    // TELEGRAPH: a committed heavy/skill winds up for ~0.45s (readable) then fires.
+    // The enemy braces during the tell so the player can block or dodge.
+    if (f.tele > 0) {
+      f.tele -= dt; f.moveInput = 0; f.block = false;
+      if (f.tele <= 0) {
+        if (f.teleKind === 'skill') trySkill(f, opp); else tryAttack(f, opp);
+        f.teleKind = null; f.think = U.rand(0.4, 0.9) * (1.5 - f.aggr);
+      }
+      return;
+    }
+    // react to an incoming strike: either dodge through it or throw up a guard
+    if (opp.atkActive > 0 && f.y <= 0 && dist < reach + 30 && f.dodgeT <= 0 && f.iframeT <= 0 && f.energy >= 10 && Math.random() < 0.04 + f.aggr * 0.05) { tryDodge(f); return; }
     if (opp.atkActive > 0 && dist < reach + 24 && Math.random() < (f.arche === 'tank' ? 0.14 : 0.05)) { if (!f.block) f.blockT0 = t; f.block = true; f.moveInput = 0; return; }
     // cheeky cross-up hop over the player
     if (f.y <= 0 && dist < reach * 0.9 && Math.random() < 0.008 + f.aggr * 0.006) { f.vy = 700; f.vx += dir * 260; Z.fx.dust(f.x, stage.groundY, 3, '#cbb489'); }
@@ -397,9 +494,9 @@ Z.combat = (function () {
     else if (dist < want - 34 && (f.arche === 'sniper' || f.arche === 'trickster')) move = -dir;
     f.moveInput = move;
     if (dist <= reach + 8 && f.atkCd <= 0 && f.think <= 0) {
-      if (f.skillCd <= 0 && f.energy >= f.skillSpec.cost && Math.random() < f.aggr * 0.4) trySkill(f, opp);
-      else tryAttack(f, opp);
-      f.think = U.rand(0.15, 0.7) * (1.5 - f.aggr);
+      const wantsSkill = f.skillCd <= 0 && f.energy >= f.skillSpec.cost && Math.random() < f.aggr * 0.4;
+      if (wantsSkill) { f.tele = 0.45; f.teleKind = 'skill'; f.think = 0.5; }   // wind up (fires on tele expiry)
+      else { tryAttack(f, opp); f.think = U.rand(0.15, 0.7) * (1.5 - f.aggr); }
     }
   }
 
@@ -593,8 +690,14 @@ Z.combat = (function () {
     const ms = stage.mscale || mechScale();
     [E, P].forEach((f) => { if (f && f.dashT > 0) { const g2 = f.dashT / 0.22; ctx.save(); ctx.globalAlpha = 0.2 * g2; for (let i = 1; i <= 2; i++) { ctx.save(); ctx.translate(-f.facing * i * 22, 0); Z.render.drawBotSide(f.x, stage.groundY - f.y, f.facing, f.spec, f.anim, { scale: ms }); ctx.restore(); } ctx.restore(); } });
     // puppets — big, grounded plastic frames
-    if (E) Z.render.drawBotSide(E.x, stage.groundY - E.y, E.facing, E.spec, E.anim, { scale: ms, hpFrac: E.hp / E.maxHp, flash: E.hitFlash > 0 ? E.hitFlash / 0.12 * 0.8 : 0 });
-    Z.render.drawBotSide(P.x, stage.groundY - P.y, P.facing, P.spec, P.anim, { scale: ms, hpFrac: P.hp / P.maxHp, flash: P.hitFlash > 0 ? P.hitFlash / 0.12 * 0.8 : 0 });
+    const teleFrac = E ? U.clamp(E.tele / 0.45, 0, 1) : 0;
+    if (E) Z.render.drawBotSide(E.x, stage.groundY - E.y, E.facing, E.spec, E.anim, { scale: ms, hpFrac: E.hp / E.maxHp, flash: E.hitFlash > 0 ? E.hitFlash / 0.12 * 0.8 : 0, tell: teleFrac, charged: E.skillCd <= 0 && E.energy >= E.skillSpec.cost });
+    Z.render.drawBotSide(P.x, stage.groundY - P.y, P.facing, P.spec, P.anim, { scale: ms, hpFrac: P.hp / P.maxHp, flash: P.hitFlash > 0 ? P.hitFlash / 0.12 * 0.8 : 0, charged: (P.skillCd <= 0 && P.energy >= P.skillSpec.cost) || (P.exCd <= 0 && P.energy >= P.energyMax - 1) });
+    // diegetic wind-up warning over an enemy that is telegraphing a heavy/skill
+    if (E && E.tele > 0) {
+      const wy = stage.groundY - E.y - E.spec.radius * ms * 2.2 + Math.sin(t * 20) * 2;
+      Z.render.pxText(ctx, '!', E.x, wy, 26 + teleFrac * 8, '#ff4436', 'center');
+    }
     // block wards (ofuda shield arc)
     [P, E].forEach((f) => { if (f && f.block) { const r = f.spec.radius * ms; ctx.strokeStyle = U.rgba(SPIRIT, 0.85); ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(f.x + f.facing * f.halfW, stage.groundY - f.y - r * 1.05, r * 0.9, -1.1, 1.1); ctx.stroke(); ctx.fillStyle = U.rgba(SPIRIT, 0.2); ctx.fill(); } });
 
@@ -617,6 +720,9 @@ Z.combat = (function () {
       const pulse = 1 + Math.sin(t * 18) * 0.06 + Math.min(comboN, 20) * 0.012;
       Z.render.pxText(ctx, comboN + ' HITS', W * 0.5, H * 0.14, 20 * pulse, GOLD, 'center');
       Z.render.pxText(ctx, 'COMBO', W * 0.5, H * 0.14 - 20 * pulse, 9, SPIRIT, 'center');
+      // thin draining timer bar so the string feels alive / on a clock
+      const bw = 90, bf = U.clamp(comboT / 1.4, 0, 1);
+      ctx.save(); ctx.fillStyle = U.rgba(GOLD, 0.8); ctx.fillRect(W * 0.5 - bw / 2, H * 0.14 + 14, bw * bf, 3); ctx.restore();
     }
     Z.render.drawPetals(t);
   }
@@ -687,7 +793,20 @@ Z.combat = (function () {
   function hud() {
     if (!P) return;
     setBar('bhpL', P.hp / P.maxHp); setBar('bhpR', E ? E.hp / E.maxHp : 0);
+    setGhost('bhpLghost', P.hp / P.maxHp); setGhost('bhpRghost', E ? E.hp / E.maxHp : 0);
     setBar('benL', P.energy / P.energyMax); setBar('benR', E ? E.energy / E.energyMax : 0);
+    // skill / EX ready pulse on the energy wrap
+    const enL = document.getElementById('benL');
+    if (enL) enL.parentElement.classList.toggle('ready', phase === 'fight' && P.energy >= P.skillSpec.cost);
+    const enR = document.getElementById('benR');
+    if (enR) enR.parentElement.classList.toggle('ready', phase === 'fight' && !!E && E.energy >= E.skillSpec.cost);
+    // combo readout chip: last inputs (L / L / H) + hit count
+    const cc = document.getElementById('bCombo');
+    if (cc) {
+      const active = phase === 'fight' && (comboN >= 2 || (P.chainT > 0 && P.comboKind.length >= 2));
+      if (active) { cc.textContent = P.comboKind.join(' ') + (comboN >= 2 ? '  x' + comboN : ''); cc.classList.add('show'); }
+      else cc.classList.remove('show');
+    }
     const left = Math.max(0, Math.ceil(MATCH_TIME - matchT)); const el = document.getElementById('bTimer');
     if (el) { el.textContent = mission ? ('W' + (waveIdx + 1) + ' · ' + left) : left; el.classList.toggle('low', left <= 10 && phase === 'fight'); }
   }
@@ -695,6 +814,14 @@ Z.combat = (function () {
     const e = document.getElementById(id); if (!e) return;
     e.style.width = U.clamp(f, 0, 1) * 100 + '%';
     if (id === 'bhpL' || id === 'bhpR') e.parentElement.classList.toggle('lowhp', f > 0 && f < 0.28);
+  }
+  // lagging 'chip damage' ghost bar: snaps up on heal, drains slowly after a hit
+  function setGhost(id, f) {
+    const e = document.getElementById(id); if (!e) return;
+    const tgt = U.clamp(f, 0, 1) * 100;
+    let cur = parseFloat(e.dataset.w); if (!isFinite(cur)) cur = tgt;
+    const nx = tgt > cur ? tgt : cur + (tgt - cur) * 0.12;
+    e.dataset.w = nx; e.style.width = nx + '%';
   }
 
   return { start, update, render, get active() { return phase !== 'idle'; } };

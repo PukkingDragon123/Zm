@@ -6,7 +6,7 @@
 Z.controls = (function () {
   const U = Z.util;
   const held = { left: false, right: false, up: false, down: false, block: false, attack: false, skill: false };
-  let interactQ = false, attackQ = false, skillQ = false, jumpQ = false;
+  let interactQ = false, attackQ = false, skillQ = false, jumpQ = false, dodgeQ = false;
   let mode = 'none';
   let padEl, leftCluster, rightCluster;
 
@@ -22,6 +22,7 @@ Z.controls = (function () {
       case 'KeyJ': held.attack = down; if (down && !e.repeat) attackQ = true; break;
       case 'KeyK': held.skill = down; if (down && !e.repeat) skillQ = true; break;
       case 'KeyL': case 'ShiftLeft': case 'ShiftRight': held.block = down; break;
+      case 'KeyS': case 'ArrowDown': held.down = down; if (down && !e.repeat) dodgeQ = true; break;
     }
   }
 
@@ -32,7 +33,7 @@ Z.controls = (function () {
       if (v && Z.cutscene && Z.cutscene.active) return;
       b.classList.toggle('held', v);
       if (opts.hold) held[opts.hold] = v;
-      if (v && opts.edge) { if (opts.edge === 'interact') interactQ = true; else if (opts.edge === 'attack') { attackQ = true; held.attack = true; } else if (opts.edge === 'skill') { skillQ = true; held.skill = true; } else if (opts.edge === 'jump') jumpQ = true; }
+      if (v && opts.edge) { if (opts.edge === 'interact') interactQ = true; else if (opts.edge === 'attack') { attackQ = true; held.attack = true; } else if (opts.edge === 'skill') { skillQ = true; held.skill = true; } else if (opts.edge === 'jump') jumpQ = true; else if (opts.edge === 'dodge') dodgeQ = true; }
       if (!v && opts.edge === 'attack') held.attack = false;
       if (!v && opts.edge === 'skill') held.skill = false;
     };
@@ -61,6 +62,7 @@ Z.controls = (function () {
     if (m === 'world') setRight([padButton('ENTER', 'big', { edge: 'interact' })]);
     else if (m === 'battle') setRight([
       padButton('BLK', 'blk', { hold: 'block' }),
+      padButton('DSH', 'dsh', { edge: 'dodge' }),
       padButton('JMP', 'jmp', { edge: 'jump' }),
       padButton('SKL', 'skill', { edge: 'skill' }),
       padButton('HIT', 'atk big', { edge: 'attack' }),
@@ -86,6 +88,7 @@ Z.controls = (function () {
     consumeAttack() { const v = attackQ; attackQ = false; return v; },
     consumeSkill() { const v = skillQ; skillQ = false; return v; },
     consumeJump() { const v = jumpQ; jumpQ = false; return v; },
-    reset() { for (const k in held) held[k] = false; interactQ = attackQ = skillQ = jumpQ = false; },
+    consumeDodge() { const v = dodgeQ; dodgeQ = false; return v; },
+    reset() { for (const k in held) held[k] = false; interactQ = attackQ = skillQ = jumpQ = dodgeQ = false; },
   };
 })();

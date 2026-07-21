@@ -266,9 +266,21 @@ body.no-crt #grain{display:none;}
 .bhp-bar{height:16px; border:2px solid var(--line); border-radius:9px; background:rgba(40,20,10,.6); overflow:hidden; box-shadow:var(--shadow);}
 .bhp-bar i{display:block; height:100%; width:100%; background:linear-gradient(#ff8f5e,var(--verm)); border-radius:6px; transition:width .15s;}
 .bhp.right .bhp-bar i{margin-left:auto;}
-.bhp-en{height:8px; border:2px solid var(--line); border-radius:6px; background:rgba(20,32,26,.6); margin-top:4px; overflow:hidden;}
+.bhp-bar{position:relative;}
+.bhp-bar i.ghost{position:absolute; inset:0; background:rgba(255,247,234,.5); border-radius:6px; transition:none; z-index:0;}
+.bhp-bar i#bhpL, .bhp-bar i#bhpR{position:relative; z-index:1;}
+.bhp.right .bhp-bar i.ghost{left:auto; right:0;}
+.bhp-en{height:8px; border:2px solid var(--line); border-radius:6px; background:rgba(20,32,26,.6); margin-top:4px; overflow:hidden; position:relative; transition:box-shadow .2s;}
 .bhp-en i{display:block; height:100%; width:100%; background:var(--spirit); border-radius:4px;}
 .bhp.right .bhp-en i{margin-left:auto;}
+/* skill / EX ready: a gentle spirit pulse on the energy wrap (no neon) */
+.bhp-en.ready{box-shadow:0 0 0 1px var(--spirit), 0 0 8px rgba(79,174,156,.55); animation:enready .85s ease-in-out infinite;}
+@keyframes enready{50%{box-shadow:0 0 0 1px var(--spirit), 0 0 14px rgba(79,174,156,.9);}}
+/* combo readout chip */
+.bcombo{display:none; margin-top:5px; font-family:var(--disp); font-size:11px; letter-spacing:2px; color:var(--gold);
+  background:rgba(47,36,24,.55); border:2px solid var(--line); border-radius:9px; padding:2px 9px; text-shadow:1px 1px 0 rgba(30,15,5,.8);}
+.bcombo.show{display:inline-block;}
+.bhp.right .bcombo{margin-left:auto;}
 .btimer{font-size:20px; min-width:60px; text-align:center; color:var(--ink);}
 .btimer.low{color:var(--red);}
 .announce{position:absolute; top:32%; left:0; right:0; text-align:center; font-family:var(--disp);
